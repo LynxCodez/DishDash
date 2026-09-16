@@ -1,0 +1,12 @@
+# Log files the dev server writes (machine noise, not code)
+server.log
+*.log
+
+# Local tool folders that vary per computer
+.freebuff/
+node_modules/
+.idea/
+
+# OS junk (Windows/Mac files that mean nothing to git)
+Thumbs.db
+.DS_Store
