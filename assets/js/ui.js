@@ -813,6 +813,7 @@ window.DD_UI = (function () {
   ------------------------------------------------------------ */
   const ADMIN_NAV = [
     { key: 'dashboard', label: 'Dashboard', icon: 'grid', href: 'index.html' },
+    { key: 'reports', label: 'Reports', icon: 'cal', href: 'reports.html' },
     { key: 'foods', label: 'Food items', icon: 'utensils', href: 'foods.html' },
     { key: 'categories', label: 'Categories', icon: 'tag', href: 'categories.html' },
     { key: 'orders', label: 'Orders', icon: 'receipt', href: 'orders.html', badge: true },
@@ -824,6 +825,7 @@ window.DD_UI = (function () {
     if (p === 'categories.html') return 'categories';
     if (p === 'orders.html') return 'orders';
     if (p === 'users.html') return 'users';
+    if (p === 'reports.html') return 'reports';
     return 'dashboard';
   }
   function renderAdminChrome() {

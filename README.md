@@ -205,6 +205,32 @@ before this feature needs `supabase/pay-account-schema.sql` run once (Step 6 of
 when it is absent rather than failing the order, so checkout can never break on
 an un-run migration — the admin simply sees no account snapshot until it is run.
 
+## Reports (admin)
+
+`admin/reports.html` is the analytics deep-dive (the dashboard stays the
+at-a-glance view). Every block recomputes from the same period filter —
+All time / Last 7 days / Last 30 days / This month.
+
+- **Revenue counts paid money only.** Card payments, admin-verified transfers,
+  and collected COD cash count toward revenue; `awaiting_verification` and
+  `pending` orders appear in order counts but not in the revenue number. The
+  page states this on-screen so the headline figure is defensible in a Q&A.
+- **Average order value is revenue ÷ *all* orders in the period** (paid or
+  not) — the average size of an order the business actually takes. The 7- and
+  30-day views also show a vs-previous-period delta; All time and This month
+  have no comparable previous window, so no arrow is shown there.
+- **The heatmap bins order times in Nigerian local time (`Africa/Lagos`),
+  not UTC.** Orders are stored as ISO/UTC timestamps; binning them by server
+  hour would silently shift every "peak" by an hour. `lagosParts()` in
+  `reports.js` converts via `Intl.DateTimeFormat` with an explicit timezone —
+  an order placed 23:30 UTC on a Wednesday lands in Thursday 00:30, correctly.
+- **Export CSV** downloads the filtered orders (BOM-prefixed so Excel reads
+  the ₦ sign; fields quoted per RFC 4180 when they contain commas or quotes).
+
+The maths layer (`summarize`, `revenueByMethod`, `heatmap`, `lagosParts`,
+`csvEscape` …) is pure and DOM-free, exposed read-only as `window.DD_REPORTS_TEST`
+so it can be asserted without a browser.
+
 ## Phone numbers
 
 One rule, defined once in `store.js` as `validatePhone` and used by every form
@@ -235,7 +261,7 @@ form is what actually lands in storage rather than whatever was typed.
 | 2 | Email verification before ordering | **Done** — in-app code + email-link modes, server-side rules; run `verification-schema.sql` once |
 | 3 | Real bank-account number verification | **Done** — real NUBAN check-digit validation, 23-bank CBN/NIP list, resolved-name proof before the transfer can be submitted, admin sees the snapshot. Verified end-to-end in cloud mode (`pay-account-schema.sql` applied) |
 | 4 | Customer reviews & feedback | **Done** (customer-facing); admin moderation screen not built |
-| 5 | Reports system | Not started |
+| 5 | Reports system | **Done** — admin **Reports** page: period filter (7/30 days, month, all), revenue/orders/AOV/items cards with vs-previous deltas, revenue by payment method (paid money only), 7×24 peak-hours heatmap in Lagos time, CSV export |
 | 6 | Works in any modern browser | In place by design — no browser-specific APIs; spot-checked, not exhaustively tested |
 | 7 | Browsable homepage when signed out / after logout | Mostly done — one known papercut: the footer's Account column still shows "Sign in" while a session is active |
 | 8 | Improved dish-adding flow incl. images/thumbnails | Not started |

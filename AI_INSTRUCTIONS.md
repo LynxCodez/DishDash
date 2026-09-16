@@ -208,7 +208,38 @@ that show live data should listen to both paths the way `orders.js` does.
   drop `pay_account` from either). The `orders.pay_account` migration was
   applied 2026-09-16. Fresh projects get the column from `schema.sql`; older
   ones need `pay-account-schema.sql`.
-- Item 5 — **reports system**: not started.
+- Item 5 — **reports system**: DONE (`admin/reports.html` +
+  `assets/js/admin/reports.js`, sidebar entry in `ui.js` ADMIN_NAV). Two
+  deliberate rules — don't "fix" either:
+  1. **Revenue = paid money only.** `isPaid()` gates every revenue sum:
+     card `paid`, transfer `paid`, COD `paid`. Awaiting/pending orders count
+     in order totals but never in revenue. Counting them flatters the report
+     and would be indefensible in a demo Q&A.
+  2. **All hour binning converts to `Africa/Lagos` first** (`lagosParts()`
+     with `Intl.DateTimeFormat`, `hourCycle: 'h23'`). `placedAt` is ISO/UTC;
+     using `getHours()` would shift every peak by an hour. 23:30 UTC Wednesday
+     MUST bin as Thursday 00: Lagos.
+  - AOV = revenue ÷ ALL orders in the period (not ÷ paid orders) — the
+    average size of an order taken. Only 7d/30d show vs-previous deltas;
+    all-time and this-month have no comparable window (`pctChange` returns
+    null, no arrow renders).
+  - The maths layer is pure/DOM-free and exposed as `window.DD_REPORTS_TEST`
+    for harness testing (60 assertions written 2026-09-16, all passing).
+    Don't entangle it with the render functions.
+  - CSV export: BOM prefix (₦ in Excel), RFC-4180 quoting, filename from the
+    period label.
+
+**Git/GitHub.** The project is connected to
+`https://github.com/LynxCodez/DishDash` (branch `main`, public repo). History
+begins at the owner's `.gitignore`/`LICENSE` commit, then the verified
+baseline (items 1–4). **Commit after every significant change and push** —
+that history is the restore point this project never had before 2026-09-16.
+`supabase-config.js` (anon key) is committed deliberately: the anon key is a
+public client identifier and RLS is the protection; the service_role key
+exists nowhere in the repo. Git identity is repo-local:
+`LynxCodez <LynxCodez@users.noreply.github.com>`. Credential helper is
+`manager` (GCM 2.7.3) — the first push pops a GitHub login on the owner's
+screen; later pushes reuse the stored credential.
 - Item 8 — **dish-adding flow + image/thumbnail upload**: not started.
 - Admin **review/feedback moderation screen**: DB permits it, no UI.
 - Backlog from an external review, triaged & real: order cancellation
