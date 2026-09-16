@@ -1,0 +1,254 @@
+# AI_INSTRUCTIONS.md — handoff notes for DishDash
+
+Read this before touching anything. It is the fast path to not breaking the
+project, and it documents the traps that already cost real debugging time.
+
+---
+
+## 1. What this is
+
+A **multi-page, framework-free** food-ordering web app: HTML + CSS + vanilla
+JavaScript, with **jQuery (vendored)** only for UI interactions. It runs
+entirely from `node server.js` (port **5173**, zero npm dependencies). The
+data layer is pluggable:
+
+- **Local mode** — no config, everything in `localStorage` under `dishdash_*`.
+  Works offline. Passwords stored in plaintext (deliberate, demo-only).
+- **Cloud mode** — if `assets/js/supabase-config.js` has a URL + anon key,
+  the same store API transparently uses Supabase (Auth + Postgres + RLS +
+  realtime). This project's copy points at a **live Supabase project**.
+
+**The single most important rule: `assets/js/store.js` is the only data
+boundary.** Pages never touch `localStorage`, `fetch`, or the Supabase client
+directly. Every feature ships twice inside store.js — a local implementation
+and a cloud one in the sync adapter that overrides store methods
+(`S.requestEmailCode = ...`) when a client exists — and the two must stay in
+parity. If you add a feature in one mode only, the other mode silently
+regresses.
+
+## 2. How to run / verify changes
+
+```bash
+node server.js            # → http://localhost:5173
+node --check <file.js>    # the project has NO test framework and NO linter
+```
+
+There is no `npm test`. The established verification pattern is:
+
+1. `node --check` every JS file you touched.
+2. Write a **throwaway harness** (a `.js` file at the repo root, deleted
+   after use) that loads the real `data.js` + `store.js` in local mode and
+   asserts behaviour — this has caught several real bugs.
+3. Browser-test through `http://localhost:5173` (the app must be served;
+   `file://` breaks the pages).
+4. **Never write test data to the live Supabase project** without asking.
+   Read-only probes with the anon key via `curl` are fine
+   (`/rest/v1/<table>?select=...`, `/rest/v1/rpc/<fn>`).
+5. Test **cloud-mode code paths without touching any database** by stubbing the
+   client: `store.js` exposes `window.DD_STORE_SYNC` (with `init()`, `status()`,
+   `placeOrder()`, `_state`) and reads `window.supabase.createClient`, so a VM
+   harness can supply a fake client that returns real PostgREST error shapes
+   (`PGRST204` "could not find the 'x' column", `42703` "column does not
+   exist") and assert what the app sends. This is how the missing-column
+   behaviour below was proven without a single live write.
+6. ⚠️ **Do NOT blank `supabase-config.js` to force local mode.** It is the one
+   file in this project that holds a value the AI cannot regenerate (the anon
+   key), and on 2026-09-16 blanking it for a walkthrough **destroyed the key**
+   — there is no git repo here and no backup, so the owner had to re-paste it
+   from the Supabase dashboard. If you must switch modes, do it with a
+   byte-exact copy (`cp` to a sibling file first — never retype the key from
+   memory), or better, use the stub-client harness in point 5.
+
+## 3. Supabase: what the AI can and cannot do
+
+- There is **no CLI, no psql, no service key** in this repo. The anon key in
+  `supabase-config.js` is public by design (RLS is the protection) — you can
+  use it for REST probes, but you **cannot run DDL**.
+- The SQL files under `supabase/` are applied by **the human pasting them
+  into the Supabase SQL Editor**. If you edit a `.sql` file, tell the user it
+  must be **re-pasted** — Postgres functions are snapshotted at creation, so
+  editing the file does nothing to a database that already ran the old
+  version. This bit us once: a runtime crash (`digest() missing`) lived only
+  in the DB while the file looked correct.
+- Three SQL files exist and are idempotent/re-runnable:
+  - `supabase/schema.sql` — core tables, RLS, `protect_role_change()`
+    trigger, realtime publications.
+  - `supabase/reviews-schema.sql` — reviews + feedback + RLS.
+  - `supabase/verification-schema.sql` — email verification (codes table,
+    `request_email_code()` / `confirm_email_code(text)` /
+    `mark_email_verified()` RPCs, `protect_verification_flag()` trigger).
+  - `supabase/pay-account-schema.sql` — item 3: adds `orders.pay_account`
+    (jsonb) for the customer's verified paying-account snapshot.
+
+- **`supabase-config.js` holds the only two values in this repo that an AI
+  cannot regenerate** (project URL + anon key). Cloud mode needs both; with an
+  empty key the app silently runs local mode. On 2026-09-16 a walkthrough
+  blanked that file and destroyed the key, and the owner had to re-paste it from
+  the dashboard — read section 2, point 6 before you touch it. It is restored
+  and verified (a read-only `curl` to `/rest/v1/foods` returns 200 with it).
+
+## 4. Facts that will bite you if you skip them
+
+**Email verification (`store.js`).**
+- `emailVerified()` intentionally trusts Supabase's `emailConfirmed` **only
+  in email-link mode**. With "Confirm email" OFF (this project's setting),
+  Supabase auto-confirms every sign-up — trusting that stamp in code mode
+  made the entire in-app code flow dead on arrival in cloud mode. If you
+  "simplify" that conditional back, you resurrect a live bug.
+- Mode is auto-detected from how `signUp` answers (session ⇒ code mode, no
+  session ⇒ link mode) and cached in `localStorage` (`dishdash_vmode`).
+- Demo codes are stashed in `localStorage` (`dishdash_demo_code`) because the
+  DB stores only a hash — the demo panel must survive a reload mid-cooldown.
+- Postgres hashing uses **`encode(sha256(convert_to(x,'UTF8')), 'hex')`**, not
+  pgcrypto `digest()` — the extension is not installed and this file must have
+  zero extension dependencies. Core `sha256()` RETURNS `bytea`, NOT hex text;
+  omitting `encode(..., 'hex')` breaks confirm_email_code with
+  "operator does not exist: text <> bytea" (bit us once — don't repeat it).
+- `verification_codes` has RLS with **no policies**: deliberately unreadable
+  by any client. Don't "fix" that.
+- Error codes matter: `PGRST202` = RPC missing (say "run the SQL");
+  `42883` = RPC exists but crashed (surface the raw message — it is a code
+  bug, not a setup step).
+- Seed/demo accounts are **grandfathered as verified** (in the SQL migration
+  and in `data.js`) so `demo@dishdash.ng` can always order. New accounts
+  cannot order until verified; the gate lives in checkout's single
+  `finishOrder` funnel, not per payment method.
+
+**Bank-account verification / transfers (item 3).**
+- Lives in `store.js` (`nubanCheckDigit`, `validateNuban`, `resolveBankAccount`),
+  the transfer panel in `pages/checkout.js`, and the admin snapshot in
+  `admin/orders.js` (`payingAccountHTML`).
+- **Enforced:** digits only, exactly 10 digits, and a bank from `D.NG_BANKS`.
+  **Reported, not enforced:** the CBN check digit — it does not hold for every
+  account and no wallet provider (OPay/Kuda/Moniepoint) has a public prefix
+  rule, so a hard gate would reject real numbers on stage. `validateNuban`
+  returns `checkDigit: 'match' | 'mismatch' | 'n/a'` and the UI shows a green
+  confirmation, an amber caution, or "wallet — no public rule".
+  **Do not turn the mismatch into a hard failure** — that is a deliberate
+  safety choice, not an oversight.
+- Name resolution is **simulated by default** (deterministic from account +
+  bank code so it repeats on stage). The provider seam is
+  `POST /api/resolve-account` in `server.js`: **501 when
+  `PAYSTACK_SECRET_KEY` is unset** (client falls back to the demo resolver),
+  otherwise a server-side provider call. The secret never reaches the browser,
+  and `resolveBankAccount` must keep working with the endpoint absent
+  (`fetch` rejected / 404 on a static host) — the offline demo depends on it.
+- The snapshot `{account, bankCode, bank, accountName, source, at}` is stored on
+  the order as `payAccount` and quoted in the admin's Verify Payment dialog.
+- **Cloud column detection (keep this pattern):** `detectPayAccountColumn()`
+  probes `orders.pay_account` once at boot (`postgres` answers 42703 when the
+  migration has not run) and `withoutPayAccount()` strips the field from writes
+  when absent, with a retry-on-`PGRST204` backstop. Same fail-safe idea as the
+  email-verification flag: an un-run migration must never fail a customer's
+  order. Don't "simplify" it into a plain write.
+- **`setPanel` in checkout.js must render synchronously.** The payment panels
+  are swapped with `$panel.html(...)` + the CSS `panelIn` animation, *not* a
+  jQuery fade — fade callbacks are timers, and browsers throttle those in a
+  backgrounded tab, which left the payment area blank until refocus. The CSS
+  animation cannot stall that way.
+- The transfer CTA starts **disabled** and `confirmTransfer` re-verifies the
+  snapshot against the live inputs before submitting, so re-rendering the panel
+  cannot unlock it.
+
+**Credentials / backups.** Before temporarily editing any file that contains a
+value only the owner can provide (`supabase-config.js` today), make a byte-exact
+copy first and compare `md5sum` after restoring. Losing that anon key cost the
+owner a manual dashboard round-trip (section 2, point 6).
+
+**Phone numbers.** One rule, `validatePhone`/`normalizePhone` in store.js:
+exactly 11 digits starting 070/080/081/090/091; `+234` and missing-leading-
+zero forms are accepted and normalised to `0803...`. This matters because
+seed accounts store `+234 803 412 7788` — a stricter rule locks the demo
+customer out of checkout. Enforced on register, checkout, both profile
+fields, and on every write path (orders store the canonical form).
+
+**Auth/roles.** Roles are guarded by the `protect_role_change()` trigger:
+only an existing admin may change roles, except the one-time bootstrap
+window (no admin exists) that the setup wizard relies on. Never move role
+logic to the client.
+
+**Reviews.** One review per customer per dish (DB-enforced duplicate error
+must map to a friendly "edit your existing review" message); owner-only
+edit/delete re-checked in the store, not just hidden in the UI. "Verified
+order" badge is computed from delivered orders at read time.
+
+**Realtime.** In cloud mode, orders/reviews sync across browsers via
+Supabase realtime; in local mode, cross-tab via the `storage` event. Pages
+that show live data should listen to both paths the way `orders.js` does.
+
+## 5. Conventions
+
+- Vanilla JS, ES5-ish style, no modules, no transpile: each page's controller
+  lives in `assets/js/pages/*.js` (or `assets/js/admin/*.js`) and is included
+  by its HTML file. Shared chrome/components in `ui.js` (`UI.toast`,
+  `UI.confirm`, `UI.go`, `UI.ic`, `UI.esc`, `UI.statusBadge`, …) — reuse
+  those instead of adding new dialog/notify mechanisms.
+- CSS is one design system in `assets/css/style.css` (+ `admin.css`), token
+  variables in `:root`. Before adding classes, grep for collisions — prefix
+  features (`vf-`, `rv-`) instead of generic names.
+- Seed content only in `data.js`. No hardcoded food/user data anywhere else.
+- jQuery is vendored at `assets/js/vendor/jquery-3.7.1.min.js`; don't add CDNs
+  or npm packages (the demo must run offline).
+- Images: Unsplash URLs with emoji/gradient fallbacks (`data.js` `img()`),
+  `onerror="this.remove()"` pattern.
+- **Standing rule from the owner (do not skip):** after every significant
+  change, update `README.md`, `SETUP-SUPABASE.md` AND this file in the same
+  pass — before reporting the work as done. The project is handed between
+  AI assistants and IDEs, so stale docs directly cause the next AI to
+  misconfigure or break things. `README.md` doubles as the feature ledger
+  ("Feature status"); new Supabase errors belong in the SETUP
+  troubleshooting table; new traps belong in section 4 here.
+
+## 6. Known gaps / roadmap (matches README "Feature status")
+
+- Item 3 — **real bank-account verification**: DONE and **verified live
+  end-to-end in cloud mode** — order placed with the snapshot, read back raw
+  from the `orders` table, admin verified the payment, and the snapshot
+  SURVIVED the update (orderToDb/orderFromDb round-trip it correctly; don't
+  drop `pay_account` from either). The `orders.pay_account` migration was
+  applied 2026-09-16. Fresh projects get the column from `schema.sql`; older
+  ones need `pay-account-schema.sql`.
+- Item 5 — **reports system**: not started.
+- Item 8 — **dish-adding flow + image/thumbnail upload**: not started.
+- Admin **review/feedback moderation screen**: DB permits it, no UI.
+- Backlog from an external review, triaged & real: order cancellation
+  (customer while pending / admin refuse), bulk admin actions (advance many
+  orders), push-notification simulation on status change, admin analytics
+  (revenue by payment method, AOV, peak-hours heatmap), XSS audit
+  (ensure UI.esc on every user-generated render), loading states for
+  first cloud fetch. Rejected as stale: print receipt (exists), dark mode
+  and i18n (owner has not asked).
+- Footer Account column shows "Sign in" even while signed in (`ui.js`,
+  header/drawer are session-aware, footer is not).
+- Seed order dates in data.js are anchored to **Date.now()** (not a fixed
+  timestamp), so the dashboard's 7-day chart always covers "the last seven
+  days". Don't "stabilise" it back to a constant — a checkout re-opened
+  months later would show an empty chart.
+- ui.js installs **global error boundaries** (unhandledrejection + error →
+  toast). Expected failures return {ok:false} objects and never reach it;
+  if a toast fires during normal use, treat it as a real bug.
+- ui.js already ships **UI.printReceipt** (wired into confirmation + orders
+  pages) — an external review suggested "building" it; it exists.
+- An external AI review (Sept 2026) also claimed date-anchoring and error
+  handlers were "already fixed" — both were actually still broken and have
+  NOW been fixed for real. Verify claims against code, not against reviews.
+- Cloud-mode verification flow: **verified live and confirmed working by the
+  owner.** It took two SQL re-pastes to get there (see the sha256 and
+  digest() notes in section 4). If confirm/request ever fails with
+  "function digest(text, unknown) does not exist" or "operator does not
+  exist: text <> bytea", the database is running an OLD function version —
+  re-paste the current `verification-schema.sql`, then request a FRESH code
+  (codes minted by an old function have hashes in the wrong format).
+
+## 7. Housekeeping
+
+- `server.js` is a tiny static server with no deps — extend it only if a new
+  MIME type or route genuinely needs it.
+- `setup-demo.html` is the one-click wizard: it seeds Supabase and signs seed
+  users in, which is why the SQL deliberately keeps "Confirm email" OFF.
+  If that setting is turned ON for real email links, newly wizard-created
+  users will need confirmation first — the app handles it (link mode), the
+  wizard's instant sign-in does not.
+- The live Supabase project may contain throwaway test accounts
+  (`live.test.dd@gmail.com` etc.) from verification testing — safe for the
+  user to delete from the Supabase dashboard (Authentication → Users).

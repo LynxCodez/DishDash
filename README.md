@@ -1,0 +1,277 @@
+# 🍔 DishDash — Good food. Fast delivery.
+
+A responsive **online food ordering & delivery management platform**: customers
+discover food, order, pay (simulated) and track deliveries; administrators
+manage the menu, categories, orders and customers.
+
+Built as a traditional **multi-page HTML5 / CSS3 / Vanilla JavaScript**
+application with **jQuery** for UI interactions — no frontend framework — with
+a pluggable data layer that runs on **localStorage** (no setup, works offline)
+or **Supabase** (auth + Postgres + realtime).
+
+## Run locally
+
+```bash
+node server.js          # or: npm run dev   →  http://localhost:5173
+```
+
+No dependencies, no build step. jQuery is vendored under `assets/js/vendor/`.
+Photos load from Unsplash with emoji/gradient fallbacks when offline.
+
+**Data mode:** by default the app runs on localStorage so the demo works with
+zero setup. To go live with Supabase, paste your project URL + anon key into
+`assets/js/supabase-config.js` — the same `store.js` API keeps working and
+auth, orders, reviews etc. sync to Postgres with realtime across browsers.
+See `supabase/schema.sql` (core) and `supabase/reviews-schema.sql`
+(reviews + feedback), or run the `setup-demo.html` wizard.
+
+## Demo accounts
+
+| Role     | Email               | Password  |
+|----------|---------------------|-----------|
+| Customer | demo@dishdash.ng    | demo1234  |
+| Admin    | admin@dishdash.ng   | admin123  |
+
+Use the “demo account” buttons on the sign-in page for one-click access.
+
+## Pages
+
+**Customer** — Home · Menu (search/filter/sort/pagination) · Dish detail
+(menu story + **reviews**) · Cart · Checkout (delivery info + simulated
+payment) · Order confirmation (printable receipt) · Orders · Order tracking · Favourites ·
+Profile · **Verify email** · Sign in · Register
+
+**Admin** (`/admin/`) — Dashboard (stats, 7-day chart, status donut, top
+dishes) · Food items (CRUD + availability) · Categories (CRUD) · Orders
+(status pipeline) · Customers
+
+Both sides run in any modern browser (Chrome, Edge, Firefox, Safari) — no
+browser-specific APIs, no build step.
+
+## Architecture
+
+```
+dishdash/
+├── index.html … register.html      customer pages (one HTML per route)
+├── admin/                          admin console pages
+├── verify.html                     email verification (see below)
+└── assets/
+    ├── css/style.css, admin.css    design system (tokens, components)
+    ├── img/favicon.svg
+    └── js/
+        ├── vendor/jquery-3.7.1.min.js
+        ├── data.js                 sample data only (foods, categories, seeds)
+        ├── store.js                state + persistence (THE data boundary —
+        │                           localStorage locally, Supabase in cloud
+        │                           mode, same API for both)
+        ├── supabase-config.js      Supabase URL + anon key (cloud mode)
+        ├── ui.js                   shared chrome, cards, toasts, modals
+        └── pages/, admin/          per-page logic
+
+supabase/
+├── schema.sql                core tables (profiles, foods, orders, RLS triggers)
+├── reviews-schema.sql        reviews + feedback + RLS + realtime
+├── verification-schema.sql   email verification (codes, RPCs, guard trigger)
+└── (open setup-demo.html to seed everything from the browser)
+```
+
+Layering rules:
+
+- **data.js** — pure seed content (Nigerian menu with ₦ prices, seed orders).
+- **store.js** — owns persistence (localStorage `dishdash_*` locally, or
+  Supabase Postgres + realtime when `supabase-config.js` is filled in),
+  auth sessions, cart, favourites, orders, reviews, feedback, email
+  verification, the Nigerian phone-number rule (below) and admin CRUD.
+  Pages never touch storage directly, so the data layer is swappable inside
+  this one module. In cloud mode it syncs across browsers via Supabase
+  realtime (orders, reviews).
+- **ui.js** — shared components & chrome; jQuery drives the interaction layer
+  (menus, drawers, toasts, modal transitions, animations); the rest is vanilla.
+- **pages/** — thin per-page controllers.
+
+## Reviews & feedback
+
+- **Food reviews** — every dish detail page shows customer reviews and a
+  live rating chip (average + count) on menu cards. Signed-in customers can
+  write **one review per dish** (rating 1–5, title, body). Their own review
+  carries **Edit** and **Delete** controls on the review itself: Edit reopens
+  the same form prefilled and saves in place, Delete asks for confirmation
+  first. Both actions are re-checked against the current session by the store,
+  so a stale button can never touch another customer's review. A reviewer who
+  has a **delivered** order containing the dish gets a “Verified order” badge,
+  computed at read time — no manual flagging.
+- **Site feedback** — the “Tell us how we're doing” button (page footer)
+  opens a modal that saves name/email/rating/message to the feedback inbox.
+  It works for signed-in *and* anonymous visitors.
+- **Storage** — fully implemented in both modes: localStorage under
+  `dishdash_reviews` / `dishdash_feedback`, and Postgres tables
+  `public.reviews` / `public.feedback` with row-level security (public
+  read, owner insert/update/delete, admin moderate) and realtime. Run
+  `supabase/reviews-schema.sql` once in the Supabase SQL Editor to enable
+  the cloud path; in local mode everything works out of the box.
+- **Not built yet** — there is no admin moderation *screen*. The database
+  already permits it (`admin moderates reviews`, `admin reads feedback`), but
+  the admin console has no reviews/feedback inbox, so moderation today means
+  the Supabase dashboard.
+
+## Email verification
+
+A new account can browse and fill a cart immediately, but **cannot place an order
+until its email address is confirmed**. Verification state is read from the
+profile, and the ordering gate lives in the one place every payment method
+funnels through, so it cannot be side-stepped by choosing a different method.
+
+**Two delivery modes, detected automatically.** Both are supported and the app
+picks the right one from how Supabase responds to a sign-up — there is no flag to
+set and no code change between them:
+
+| Project setting | Mode | What happens |
+|---|---|---|
+| "Confirm email" **OFF** | in-app code | A 6-digit code is generated and shown in a labelled **Demo inbox** panel on `verify.html`. **Nothing is emailed.** |
+| "Confirm email" **ON** | email link | Supabase sends a real confirmation email to whatever address was entered; the page explains the inbox round-trip and detects your return. |
+
+**The verification logic is real, even in demo mode.** The code is generated in
+Postgres, stored only as a SHA-256 hash, expires after 10 minutes, allows five
+wrong attempts before being burned, is single-use, and enforces a 60-second
+resend cooldown — all server-side, so the rules hold regardless of what the
+browser does. `verification_codes` has RLS enabled with no policies at all, so
+no client can read it; only the `SECURITY DEFINER` functions touch it. A guard
+trigger mirrors the existing `protect_role_change()` pattern so a customer cannot
+write their own `email_verified_at` through the (broad) "update own profile"
+policy.
+
+**What is deliberately not real:** in demo mode no email or SMS is sent. The code
+is displayed in the app, so it demonstrates the *flow* — generation, expiry,
+attempt limits, the gate — but not ownership of the inbox. Only the email-link
+mode with custom SMTP configured proves that. Describe it as *simulated delivery,
+real verification logic*.
+
+**Existing accounts are grandfathered.** `verification-schema.sql` marks every
+account that already exists as verified, and `data.js` does the same for the
+seeded demo users, so `demo@dishdash.ng` and the other demo logins keep ordering
+exactly as before. Admins are exempt from the gate. Verification is therefore
+demonstrated on a **freshly registered** account.
+
+**It fails safe if the SQL is not run.** The feature keys off whether the
+`email_verified_at` column exists: absent means "not installed", and everyone is
+left unblocked rather than locked out of a working app.
+
+To enable it, run `supabase/verification-schema.sql` once (see
+`SETUP-SUPABASE.md` → Step 5, which also covers the Gmail/SMTP route for real
+emails).
+
+## Bank-account verification (transfers)
+
+The bank-transfer checkout asks the customer to confirm the account they are
+paying **from**, the way a real transfer app does before it accepts a payment:
+
+1. Pick the bank from the CBN/NIP list (`NG_BANKS` in `data.js` — 23 everyday
+   banks and wallet providers with their real institution codes).
+2. Type the 10-digit account number. The field shows a live `7/10 digits` count
+   while typing and only turns red on blur, so a short number is never a
+   mystery.
+3. The number is validated and the account holder's name is resolved and shown
+   as proof *before* "I've Made the Transfer" unlocks. That button starts
+   disabled, and `confirmTransfer` re-checks the verified snapshot on click, so
+   the gate cannot be side-stepped by re-rendering the panel.
+
+The resolved snapshot — account, bank, holder name, how it was checked, and
+when — is stored on the order and quoted in the admin's **Verify Payment**
+dialog, so "verify" is a decision about something the admin can actually see.
+
+**What is real and what is simulated.** The number format and the check digit
+are the real public CBN NUBAN rule. Name resolution is **simulated by default**:
+a deterministic resolver derives a stable name from the account digits, so the
+same account always resolves to the same name on stage and the demo never
+depends on venue internet. Real name-enquiry (NIBSS/Paystack-style) needs a
+licensed provider — Paystack's free test keys only resolve its own fake
+accounts, and live keys need a registered business. So `server.js` carries a
+~40-line seam: export `PAYSTACK_SECRET_KEY` and `/api/resolve-account` proxies
+to the provider; without it the endpoint answers `501` and the client uses the
+demo resolver. The key never reaches the browser.
+
+**The check digit is reported, not enforced.** It does not hold for every
+account, and wallet providers (OPay/Kuda/Moniepoint) publish no prefix rule at
+all, so hard-gating on it would reject legitimate numbers in front of an
+audience. What *is* enforced is what is always true of a NUBAN: digits only,
+exactly ten of them, and a real bank selected. A check-digit mismatch shows an
+amber caution instead of a refusal. The UI labels every outcome honestly —
+"passed the CBN NUBAN check-digit test", "check digit did not match", or
+"mobile-money wallet — no public rule".
+
+**In cloud mode** the snapshot lives in `orders.pay_account`; a project created
+before this feature needs `supabase/pay-account-schema.sql` run once (Step 6 of
+`SETUP-SUPABASE.md`). The app probes for that column at boot and drops the field
+when it is absent rather than failing the order, so checkout can never break on
+an un-run migration — the admin simply sees no account snapshot until it is run.
+
+## Phone numbers
+
+One rule, defined once in `store.js` as `validatePhone` and used by every form
+that collects a number — register, checkout, and both profile fields — so the
+rule can never drift between pages:
+
+- **Exactly 11 digits**, beginning `070`, `080`, `081`, `090` or `091`.
+- Spaces, dashes, dots and brackets are ignored, so `0803 412 7788` and
+  `(0803) 412-7788` both work.
+- The international form is **accepted and normalised** — `+234 803 412 7788`
+  becomes `08034127788`. This matters in practice: the seed and demo accounts
+  store their numbers in `+234 …` form, so a stricter rule would have made the
+  demo customer unable to check out. A missing leading zero (`8034127788`) is
+  also accepted.
+- Anything else — a landline or unassigned prefix (`020`, `030`, `060`), the
+  wrong length, letters, or a stray extension — is rejected with an inline
+  message that names the accepted prefixes.
+
+The store normalises the number on the way in (`registerUser`, profile
+updates, and the customer block of every order), so the canonical 11-digit
+form is what actually lands in storage rather than whatever was typed.
+
+## Feature status
+
+| # | Feature | State |
+|---|---------|-------|
+| 1 | Fixed 11-digit Nigerian phone (070/080/081/090/091) | **Done** — one rule in `store.js`, enforced on all four entry points and on write |
+| 2 | Email verification before ordering | **Done** — in-app code + email-link modes, server-side rules; run `verification-schema.sql` once |
+| 3 | Real bank-account number verification | **Done** — real NUBAN check-digit validation, 23-bank CBN/NIP list, resolved-name proof before the transfer can be submitted, admin sees the snapshot. Verified end-to-end in cloud mode (`pay-account-schema.sql` applied) |
+| 4 | Customer reviews & feedback | **Done** (customer-facing); admin moderation screen not built |
+| 5 | Reports system | Not started |
+| 6 | Works in any modern browser | In place by design — no browser-specific APIs; spot-checked, not exhaustively tested |
+| 7 | Browsable homepage when signed out / after logout | Mostly done — one known papercut: the footer's Account column still shows "Sign in" while a session is active |
+| 8 | Improved dish-adding flow incl. images/thumbnails | Not started |
+| — | Order cancellation (customer while pending, admin refuse) | Not started |
+| — | Bulk admin actions (advance many orders at once) | Not started |
+| — | Push-notification simulation on status change | Not started |
+| — | Admin analytics: revenue by method, AOV, peak-hours heatmap | Not started |
+
+## Order lifecycle
+
+`Pending → Confirmed → Preparing → Out for Delivery → Delivered`
+
+Administrators advance orders in the admin console; the customer’s tracking
+page updates live — across tabs in local mode, and across browsers/devices in
+cloud mode via Supabase realtime.
+
+## Security notes (demo)
+
+- Payments are **simulated** — no real card data is collected or stored.
+
+**In cloud mode** (a project URL + anon key are present in
+`supabase-config.js`), authentication goes through Supabase Auth, so the anon
+key sitting in the file is expected, not a leak: it is a public client
+identifier and is useless on its own. What actually protects the data is
+row-level security — `schema.sql` and `reviews-schema.sql` enable RLS on every
+table, grant customers access only to their own rows, and gate all writes to
+the catalog and other users' orders behind the `is_admin()` check. Do not
+commit a **service-role** key: that one bypasses RLS entirely.
+
+Role escalation is guarded in the database, not the UI —
+`protect_role_change()` rejects any `profiles.role` mutation that is not
+performed by an existing admin. The single exception is bootstrap: while no
+admin exists yet, one user may claim the role, which is what makes the
+one-click demo setup work (see `SETUP-SUPABASE.md`).
+
+**In local mode** (the zero-setup fallback with no key configured) everything
+lives in browser localStorage: no server, no network calls, and passwords are
+stored in plaintext so the demo works offline. That is fine for a prototype on
+your own machine and is not safe to expose publicly as-is.

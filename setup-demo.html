@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DishDash — Cloud Setup</title>
+<link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+<style>
+  :root{
+    --brand:#e8542a; --brand-dark:#c43d1a; --ink:#241d18; --muted:#7c6f66;
+    --bg:#faf7f4; --card:#ffffff; --line:#eee5dd;
+    --ok:#1e9e5a; --warn:#d97706; --err:#dc2626;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;padding:40px 20px}
+  .wrap{max-width:720px;margin:0 auto}
+  .logo{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+  .logo .mark{width:44px;height:44px;border-radius:12px;background:var(--brand);display:grid;place-items:center;font-size:24px;color:#fff}
+  .logo h1{font-size:24px;letter-spacing:-.3px}
+  .logo h1 span{color:var(--brand)}
+  .sub{color:var(--muted);margin-bottom:28px;font-size:15px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-bottom:14px}
+  .card h2{font-size:16px;display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  .num{width:26px;height:26px;border-radius:50%;background:var(--line);color:var(--muted);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+  .num.done{background:var(--ok);color:#fff}
+  .card p{color:var(--muted);font-size:13.5px;line-height:1.55;margin-bottom:12px}
+  button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:10px 18px;cursor:pointer;background:var(--brand);color:#fff;transition:background .15s}
+  button:hover:not(:disabled){background:var(--brand-dark)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.ghost{background:transparent;color:var(--brand);border:1.5px solid var(--brand)}
+  button.ghost:hover:not(:disabled){background:rgba(232,84,42,.08)}
+  .state{font-size:13px;margin-top:10px;line-height:1.6}
+  .state.ok{color:var(--ok)} .state.err{color:var(--err)} .state.warn{color:var(--warn)}
+  code{background:#f4ede6;border:1px solid var(--line);border-radius:6px;padding:2px 7px;font-size:12.5px;word-break:break-all}
+  pre{background:#2b2320;color:#f5ede4;border-radius:10px;padding:14px 16px;font-size:12px;line-height:1.6;overflow-x:auto;margin:10px 0;white-space:pre-wrap}
+  .log{background:#fffdfb;border:1px dashed var(--line);border-radius:10px;padding:12px 14px;font-size:12.5px;color:var(--muted);max-height:180px;overflow-y:auto;margin-top:12px;display:none}
+  .log div{padding:2px 0;border-bottom:1px solid #f6efe8}
+  .log div:last-child{border-bottom:0}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}
+  a.btn{display:inline-block;font:inherit;font-weight:600;text-decoration:none;border-radius:10px;padding:10px 18px;background:var(--ink);color:#fff}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">
+    <div class="mark">🍱</div>
+    <h1>Dish<span>Dash</span> cloud setup</h1>
+  </div>
+  <p class="sub">One-time connection between this browser and your Supabase project. Every step is safe to re-run.</p>
+
+  <div class="card">
+    <h2><span class="num" id="n1">1</span> Connect to Supabase</h2>
+    <p id="s1text">Reading <code>assets/js/supabase-config.js</code>…</p>
+    <pre id="configHelp" hidden>window.DD_SUPABASE_CONFIG = {
+  SUPABASE_URL: 'https://YOUR-PROJECT.supabase.co',
+  SUPABASE_ANON_KEY: 'eyJ…your anon public key'
+};</pre>
+    <div class="actions" id="s1actions" hidden>
+      <button id="b1">Test connection</button>
+    </div>
+    <div class="state" id="s1state"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="num" id="n2">2</span> Create the demo accounts</h2>
+    <p>Registers the six DishDash demo users (admin + 5 customers) with Supabase Auth. Passwords: <code>admin123</code> for the admin, <code>demo1234</code> for customers. Accounts that already exist are simply skipped.</p>
+    <div class="actions"><button id="b2" disabled>Create demo accounts</button></div>
+    <div class="state" id="s2state"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="num" id="n3">3</span> Make admin@dishdash.ng the administrator</h2>
+    <p>Promotes the admin profile. This works right now because the schema allows the <em>first</em> admin to self-promote once; afterwards only admins can manage roles.</p>
+    <div class="actions"><button id="b3" disabled>Promote to admin</button></div>
+    <div class="state" id="s3state"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="num" id="n4">4</span> Seed the demo orders &amp; favourites</h2>
+    <p>Copies the nine demo orders (DD-1001 → DD-1009) and a few favourites into Supabase so every browser sees the same rich history. Skips orders that already exist.</p>
+    <div class="actions"><button id="b4" disabled>Seed demo data</button></div>
+    <div class="state" id="s4state"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="num" id="n5">5</span> Done — open the site</h2>
+    <p>Any browser pointed at this site now shares one live dataset: order in Chrome as a customer, watch it appear in Firefox's admin console. The demo orders' status will also advance automatically over time like before.</p>
+    <div class="actions">
+      <a class="btn" href="index.html">Open DishDash →</a>
+      <a class="btn" href="admin/index.html" style="background:var(--brand)">Open admin console →</a>
+    </div>
+    <div class="state" id="s5state"></div>
+  </div>
+
+  <div class="log" id="log"></div>
+</div>
+
+<script src="assets/js/supabase-config.js"></script>
+<script src="assets/js/vendor/supabase.js"></script>
+<script src="assets/js/data.js"></script>
+<script>
+'use strict';
+(function () {
+  const $ = function (id) { return document.getElementById(id); };
+  const CFG = window.DD_SUPABASE_CONFIG || {};
+  const D = window.DD_DATA;
+  let client = null;
+
+  function log(msg, cls) {
+    const box = $('log');
+    box.style.display = 'block';
+    const line = document.createElement('div');
+    if (cls) line.style.color = cls === 'err' ? 'var(--err)' : (cls === 'ok' ? 'var(--ok)' : '');
+    line.textContent = msg;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+  }
+  function setState(id, msg, cls) {
+    const el = $(id);
+    el.textContent = msg;
+    el.className = 'state' + (cls ? ' ' + cls : '');
+  }
+
+  /* ---------- step 1: connection ---------- */
+  (function init() {
+    if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY) {
+      $('s1text').innerHTML = 'No keys found. Open <code>assets/js/supabase-config.js</code> and paste your Project URL + anon key (Supabase Dashboard → Project Settings → API), then reload this page:';
+      $('configHelp').hidden = false;
+      setState('s1state', 'Waiting for config…', 'warn');
+      return;
+    }
+    $('s1actions').hidden = false;
+    setState('s1state', 'Keys found — click "Test connection".');
+  })();
+
+  $('b1').addEventListener('click', async function () {
+    $('b1').disabled = true;
+    setState('s1state', 'Connecting…');
+    try {
+      client = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+      const { error } = await client.from('foods').select('id').limit(1);
+      if (error) throw error;
+      setState('s1state', '✓ Connected — schema detected.', 'ok');
+      $('n1').classList.add('done');
+      ['b2', 'b3', 'b4'].forEach(function (id) { $(id).disabled = false; });
+      log('Connection OK: ' + CFG.SUPABASE_URL, 'ok');
+    } catch (e) {
+      setState('s1state', '✗ ' + ((e && e.message) || e) + ' — did you run supabase/schema.sql in the SQL editor?', 'err');
+      $('b1').disabled = false;
+    }
+  });
+
+  /* ---------- step 2: demo accounts ----------
+     Each profile is filled in while signed in AS THAT USER, because the
+     RLS policy only permits updating your own profile (auth.uid() = id).
+     Doing it as one shared session would silently update nothing.        */
+  $('b2').addEventListener('click', async function () {
+    $('b2').disabled = true;
+    setState('s2state', 'Creating accounts…');
+    let made = 0, existing = 0, failed = 0, filled = 0;
+    for (const u of D.SEED_USERS) {
+      const pw = u.password || (u.role === 'admin' ? 'admin123' : 'demo1234');
+      try {
+        const { error } = await client.auth.signUp({
+          email: u.email,
+          password: pw,
+          options: { data: { name: u.name, phone: u.phone || '' } }
+        });
+        if (error && !/already registered/i.test(error.message || '')) {
+          failed++; log('FAILED ' + u.email + ': ' + error.message, 'err');
+          continue;
+        }
+        if (error) { existing++; log('exists: ' + u.email); }
+        else { made++; log('created: ' + u.email, 'ok'); }
+
+        // sign in as this user so RLS lets us write their own profile row
+        const sess = await client.auth.signInWithPassword({ email: u.email, password: pw });
+        if (sess.error) {
+          failed++;
+          log('sign-in failed for ' + u.email + ': ' + sess.error.message, 'err');
+          if (/not confirmed/i.test(sess.error.message || '')) {
+            setState('s2state', '✗ "Confirm email" is STILL ON. Supabase → Authentication → Providers → Email → turn it off, then click again.', 'err');
+            $('b2').disabled = false;
+            return;
+          }
+          continue;
+        }
+        const uid = sess.data.user.id;
+        const { error: upErr } = await client.from('profiles').update({
+          name: u.name, phone: u.phone || '',
+          delivery_name: u.delivery.name, delivery_phone: u.delivery.phone,
+          delivery_address: u.delivery.address, delivery_city: u.delivery.city,
+          delivery_note: u.delivery.note || ''
+        }).eq('id', uid);
+        if (upErr) log('profile details for ' + u.email + ': ' + upErr.message, 'err');
+        else filled++;
+        await client.auth.signOut();
+      } catch (e) { failed++; log('FAILED ' + u.email + ': ' + e.message, 'err'); }
+    }
+    setState('s2state', '✓ ' + made + ' created, ' + existing + ' already existed, ' + filled + '/' + D.SEED_USERS.length + ' profiles filled in' + (failed ? ' — ' + failed + ' FAILED (see log)' : '') + '.', failed ? 'warn' : 'ok');
+    $('n2').classList.add('done');
+    $('b2').disabled = false;
+  });
+
+  /* ---------- step 3: promote admin ----------
+     Must be signed in AS the admin account: the RLS policy lets a user
+     update only their own row, and the bootstrap trigger allows
+     self-promotion while no admin exists yet.                        */
+  $('b3').addEventListener('click', async function () {
+    $('b3').disabled = true;
+    setState('s3state', 'Signing in as admin@dishdash.ng…');
+    try {
+      const { data: sess, error: loginErr } = await client.auth.signInWithPassword({
+        email: 'admin@dishdash.ng', password: 'admin123'
+      });
+      if (loginErr) throw loginErr;
+      const uid = sess.user.id;
+      const { data: me } = await client.from('profiles').select('role').eq('id', uid).maybeSingle();
+      if (me && me.role === 'admin') {
+        setState('s3state', '✓ Already an administrator.', 'ok');
+      } else {
+        const { error } = await client.from('profiles').update({ role: 'admin' }).eq('id', uid);
+        if (error) throw error;
+        setState('s3state', '✓ admin@dishdash.ng is now an administrator.', 'ok');
+      }
+      await client.auth.signOut();
+      $('n3').classList.add('done');
+      log('admin role set for admin@dishdash.ng', 'ok');
+    } catch (e) {
+      setState('s3state', '✗ ' + e.message + (/row-level|Only admins/i.test(e.message || '') ? ' — an admin already exists, so the one-time bootstrap window has closed.' : ''), 'err');
+      $('b3').disabled = false;
+    }
+  });
+
+  /* ---------- step 4: seed orders + favourites ---------- */
+  $('b4').addEventListener('click', async function () {
+    $('b4').disabled = true;
+    setState('s4state', 'Seeding… (signing in as admin)');
+    try {
+      const { error: authErr } = await client.auth.signInWithPassword({ email: 'admin@dishdash.ng', password: 'admin123' });
+      if (authErr) throw authErr;
+      const { data: profiles } = await client.from('profiles').select('id,email');
+      const byEmail = {};
+      (profiles || []).forEach(function (p) { byEmail[p.email] = p.id; });
+      const seedIdToEmail = {};
+      D.SEED_USERS.forEach(function (u) { seedIdToEmail[u.id] = u.email; });
+
+      const { data: existingOrders } = await client.from('orders').select('id');
+      const have = {};
+      (existingOrders || []).forEach(function (o) { have[o.id] = true; });
+
+      let made = 0, skipped = 0;
+      for (const o of D.SEED_ORDERS) {
+        if (have[o.id]) { skipped++; continue; }
+        const row = {
+          id: o.id,
+          user_id: seedIdToEmail[o.userId] ? byEmail[seedIdToEmail[o.userId]] || null : null,
+          customer: o.customer,
+          items: o.items,
+          sub: o.sub, delivery_fee: o.deliveryFee, discount: o.discount || 0,
+          promo_code: o.promoCode || null, total: o.total,
+          pay: o.pay, pay_status: o.payStatus || (o.pay === 'card' ? 'paid' : o.pay === 'bank_transfer' ? 'awaiting_verification' : 'pending'),
+          pay_ref: o.payRef || null,
+          status: o.status, status_history: o.statusHistory || [],
+          placed_at: o.placedAt, eta_min: o.etaMin || 35, source: o.source || 'seed'
+        };
+        const { error } = await client.from('orders').insert(row);
+        if (error) log('order ' + o.id + ': ' + error.message, 'err');
+        else { made++; log('seeded order ' + o.id, 'ok'); }
+      }
+
+      // favourites must be inserted while signed in AS the demo customer —
+      // the RLS policy only allows favourites with your own user_id
+      await client.auth.signOut();
+      let favsMade = 0;
+      const demoId = byEmail['demo@dishdash.ng'];
+      if (demoId) {
+        const { error: demoErr } = await client.auth.signInWithPassword({ email: 'demo@dishdash.ng', password: 'demo1234' });
+        if (demoErr) log('demo sign-in for favourites: ' + demoErr.message, 'err');
+        else {
+          const { data: favs } = await client.from('favorites').select('food_id').eq('user_id', demoId);
+          const haveF = {};
+          (favs || []).forEach(function (f) { haveF[f.food_id] = true; });
+          for (const fid of [10, 17, 22, 19]) {
+            if (!haveF[fid]) {
+              const { error: fErr } = await client.from('favorites').insert({ user_id: demoId, food_id: fid });
+              if (fErr) log('favourite ' + fid + ': ' + fErr.message, 'err'); else favsMade++;
+            }
+          }
+        }
+      }
+      await client.auth.signOut();
+      setState('s4state', '✓ Seeded ' + made + ' orders (' + skipped + ' already present) + ' + favsMade + ' favourites. Signed out of setup.', 'ok');
+      $('n4').classList.add('done');
+    } catch (e) {
+      setState('s4state', '✗ ' + e.message, 'err');
+      $('b4').disabled = false;
+    }
+  });
+
+  /* ---- Step 4b: seed demo reviews (adds believable review history) ---- */
+  $('b4').addEventListener('click', function () {
+    const btn = document.createElement('button');
+    btn.id = 'b4b'; btn.className = 'btn'; btn.textContent = 'Seed demo reviews too';
+    btn.style.marginLeft = '10px';
+    $('b4').parentNode.appendChild(btn);
+    btn.addEventListener('click', async function () {
+      btn.disabled = true; btn.textContent = 'Seeding reviews…';
+      try {
+        const { data: reviews } = await client.from('reviews').select('id').limit(1);
+        if (reviews && reviews.length) {
+          setState('s4bstate', '✓ Reviews already present — skipped.', 'ok');
+          btn.remove(); return;
+        }
+        const { data: profiles } = await client.from('profiles').select('id,email');
+        const byEmail = {}; (profiles || []).forEach(function (p) { byEmail[p.email] = p.id; });
+        // [email, food_id, rating, title, body]
+        const demoReviews = [
+          ['demi@dishdash.ng', 10, 5, 'Party-worthy jollof', 'Smoky, rich and perfectly seasoned. Arrived hot — even the plantain was on point.'],
+          ['demo@dishdash.ng', 10, 5, 'My go-to order', 'Third time ordering this and it never misses. The chicken is juicy and the rice tastes like party rice should.'],
+          ['demo@dishdash.ng', 1, 4, 'Solid burger', 'Juicy patty and the sauce is great. Fries were slightly soft by the time it arrived, but the burger itself is worth it.'],
+          ['demo@dishdash.ng', 5, 5, 'Best pepperoni in Lekki', 'Loaded with pepperoni, cheese pulls for days. Delivery was 10 minutes early.'],
+          ['demi@dishdash.ng', 7, 4, 'Great wings', 'Sticky glaze with proper heat. Ranch dip is a nice touch.']
+        ];
+        let made = 0;
+        for (const [email, foodId, rating, title, body] of demoReviews) {
+          const uid = byEmail[email];
+          if (!uid) { log('review skipped — no profile for ' + email, 'err'); continue; }
+          const { error } = await client.from('reviews').insert({ food_id: foodId, user_id: uid, rating: rating, title: title, body: body });
+          if (error) log('review (' + email + ', dish ' + foodId + '): ' + error.message, 'err');
+          else made++;
+        }
+        setState('s4bstate', '✓ Seeded ' + made + ' demo reviews. Rating chips now show live averages.', 'ok');
+        btn.remove();
+      } catch (e) {
+        setState('s4bstate', '✗ ' + e.message, 'err');
+        btn.disabled = false; btn.textContent = 'Seed demo reviews too';
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>

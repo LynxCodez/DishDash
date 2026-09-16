@@ -1,0 +1,13 @@
+{
+  "name": "dishdash",
+  "version": "1.0.0",
+  "description": "DishDash — responsive online food ordering & delivery management platform (HTML/CSS/jQuery prototype, Supabase-ready).",
+  "private": true,
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

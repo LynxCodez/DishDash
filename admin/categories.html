@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Categories — DishDash Admin</title>
+  <meta name="description" content="Manage DishDash food categories.">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/css/style.css">
+  <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body class="admin-page" data-page="admin-categories">
+  <div class="admin-shell">
+    <aside id="ddAdminSide" class="admin-side"></aside>
+    <div class="admin-main">
+      <header class="admin-topbar">
+        <button class="admin-hamb" data-side-open aria-label="Open navigation"><svg class="ic" aria-hidden="true"><use href="#i-menu"></use></svg></button>
+        <div>
+          <h1>Categories</h1>
+          <div class="at-sub">Organise the menu into browsable groups</div>
+        </div>
+        <div class="at-right">
+          <button class="btn btn-primary btn-sm" id="addCatBtn">
+            <svg class="ic" aria-hidden="true"><use href="#i-plus"></use></svg>Add category
+          </button>
+        </div>
+      </header>
+      <main class="admin-content">
+        <div class="filters-bar" style="margin-bottom:20px">
+          <p class="results-meta" id="catCount"></p>
+        </div>
+        <div id="catsGrid" class="cat-grid" style="grid-template-columns:repeat(auto-fill,minmax(210px,1fr))"></div>
+      </main>
+    </div>
+  </div>
+
+  <script src="../assets/js/vendor/jquery-3.7.1.min.js"></script>
+  <script src="../assets/js/data.js"></script>
+  <script src="../assets/js/supabase-config.js"></script>
+  <script src="../assets/js/vendor/supabase.js"></script>
+  <script src="../assets/js/store.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/admin/categories.js"></script>
+</body>
+</html>

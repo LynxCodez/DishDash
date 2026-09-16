@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Menu — DishDash | Order food online</title>
+  <meta name="description" content="Browse the full DishDash menu — burgers, pizza, chicken, rice, pasta, snacks, desserts and drinks.">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body data-page="menu">
+  <div id="ddHeader"></div>
+
+  <main id="appMain" class="skip-target">
+    <div class="container">
+      <div class="page-head">
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <a href="index.html">Home</a>
+          <svg class="ic" aria-hidden="true"><use href="#i-chev-r"></use></svg>
+          <span aria-current="page">Menu</span>
+        </nav>
+        <h1>Our menu</h1>
+        <p class="sub">Everything cooked fresh to order. Pick what you're craving.</p>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="container">
+        <div class="toolbar-row">
+          <form class="searchbar searchbar-sm" id="menuSearch" role="search" aria-label="Search menu">
+            <svg class="ic s-ic" aria-hidden="true"><use href="#i-search"></use></svg>
+            <input type="search" name="q" id="searchInput" placeholder="Search dishes…" aria-label="Search dishes">
+            <button class="btn btn-primary" type="submit" style="padding:10px 16px;font-size:.9rem">Find</button>
+          </form>
+          <div class="sort-wrap">
+            <label class="visually-hidden" for="sortSel">Sort dishes</label>
+            <select id="sortSel" aria-label="Sort dishes">
+              <option value="popular">Sort: Most popular</option>
+              <option value="rating">Sort: Top rated</option>
+              <option value="price-asc">Sort: Price · low to high</option>
+              <option value="price-desc">Sort: Price · high to low</option>
+              <option value="name">Sort: A – Z</option>
+            </select>
+          </div>
+          <button class="chip" id="stockToggle" role="switch" aria-checked="false">
+            <svg class="ic" aria-hidden="true" style="width:.95em;height:.95em"><use href="#i-check"></use></svg>
+            Available only
+          </button>
+        </div>
+        <div class="chip-row" id="catChips" role="tablist" aria-label="Filter by category"></div>
+      </div>
+    </div>
+
+    <section class="section tight" aria-label="Menu results">
+      <div class="container">
+        <div class="results-bar">
+          <span class="results-meta" id="resultsMeta" aria-live="polite"></span>
+        </div>
+        <div class="dish-grid" id="menuGrid" aria-live="polite"></div>
+        <div id="menuEmpty" hidden></div>
+        <div id="pager"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="ddFooter"></div>
+
+  <script src="assets/js/vendor/jquery-3.7.1.min.js"></script>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/supabase-config.js"></script>
+  <script src="assets/js/vendor/supabase.js"></script>
+  <script src="assets/js/store.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script src="assets/js/pages/menu.js"></script>
+</body>
+</html>

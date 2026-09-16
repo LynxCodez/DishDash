@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create account — DishDash</title>
+  <meta name="description" content="Create your DishDash account and start ordering great food.">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body data-noframe data-page="register" class="auth-body">
+  <main id="appMain" class="skip-target">
+    <div class="auth-layout">
+      <section class="auth-brand" aria-label="About DishDash">
+        <div class="auth-brand-in">
+          <a class="logo" href="index.html" aria-label="DishDash home">
+            <span class="logo-mark">
+              <svg viewBox="0 0 24 24" width="62%" height="62%" aria-hidden="true"><circle cx="12" cy="11" r="6.4" fill="none" stroke="#fff" stroke-width="1.9"/><circle cx="12" cy="11" r="1.9" fill="#fff"/><path d="M7.2 17.6c1 1 2.9 1.7 4.8 1.7s3.8-.7 4.8-1.7" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/></svg>
+            </span>
+            <span class="logo-text">Dish<em>Dash</em></span>
+          </a>
+          <h1>Your meals, <span class="grad">one account</span> away.</h1>
+          <p>Save your favourites, reorder in a tap, track every delivery and skip the queues. Creating an account takes under two minutes.</p>
+          <div style="display:flex;flex-direction:column;gap:13px;margin-top:36px">
+            <div class="feature" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.13);padding:16px;display:flex;gap:13px;align-items:center">
+              <span class="f-ico" style="width:42px;height:42px;background:rgba(255,255,255,.1);color:#FFB084;margin:0;flex:none;font-size:1.2rem"><svg class="ic"><use href="#i-heart"></use></svg></span>
+              <span style="color:#EFE0D2;font-size:.92rem;font-weight:600">Save favourites &amp; reorder them anytime</span>
+            </div>
+            <div class="feature" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.13);padding:16px;display:flex;gap:13px;align-items:center">
+              <span class="f-ico" style="width:42px;height:42px;background:rgba(255,255,255,.1);color:#FFB084;margin:0;flex:none;font-size:1.2rem"><svg class="ic"><use href="#i-truck"></use></svg></span>
+              <span style="color:#EFE0D2;font-size:.92rem;font-weight:600">Live order tracking to your door</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="auth-main">
+        <div class="auth-card">
+          <a class="logo" href="index.html" aria-label="DishDash home">
+            <span class="logo-mark">
+              <svg viewBox="0 0 24 24" width="62%" height="62%" aria-hidden="true"><circle cx="12" cy="11" r="6.4" fill="none" stroke="#fff" stroke-width="1.9"/><circle cx="12" cy="11" r="1.9" fill="#fff"/><path d="M7.2 17.6c1 1 2.9 1.7 4.8 1.7s3.8-.7 4.8-1.7" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/></svg>
+            </span>
+            <span class="logo-text">Dish<em>Dash</em></span>
+          </a>
+          <h1>Create your account</h1>
+          <p class="a-sub">Join DishDash and get ₦1,500 off your first order.</p>
+
+          <form id="regForm" novalidate>
+            <div class="field">
+              <label for="rgName">Full name</label>
+              <div class="input-affix"><span class="affix-ic"><svg class="ic" aria-hidden="true"><use href="#i-user"></use></svg></span>
+                <input class="input" id="rgName" name="name" autocomplete="name" placeholder="e.g. Ayo Balogun">
+              </div>
+              <span class="err">Please enter your full name (min. 3 characters).</span>
+            </div>
+            <div class="field">
+              <label for="rgEmail">Email address</label>
+              <div class="input-affix"><span class="affix-ic"><svg class="ic" aria-hidden="true"><use href="#i-mail"></use></svg></span>
+                <input class="input" type="email" id="rgEmail" name="email" autocomplete="email" placeholder="you@example.com">
+              </div>
+              <span class="err">Enter a valid email address.</span>
+            </div>
+            <div class="field">
+              <label for="rgPhone">Phone number <span style="color:var(--faint);font-weight:600">(optional)</span></label>
+              <div class="input-affix"><span class="affix-ic"><svg class="ic" aria-hidden="true"><use href="#i-phone"></use></svg></span>
+                <input class="input" id="rgPhone" name="phone" autocomplete="tel" inputmode="tel" placeholder="e.g. 0803 123 4567">
+              </div>
+              <span class="err">Enter an 11-digit Nigerian number starting with 070, 080, 081, 090 or 091 — e.g. 0803 123 4567.</span>
+            </div>
+            <div class="field">
+              <label for="rgAddr">Delivery address</label>
+              <div class="input-affix"><span class="affix-ic"><svg class="ic" aria-hidden="true"><use href="#i-pin"></use></svg></span>
+                <input class="input" id="rgAddr" name="address" autocomplete="street-address" placeholder="House number, street, estate / area">
+              </div>
+              <span class="err">Enter your delivery address (min. 8 characters).</span>
+            </div>
+            <div class="field">
+              <label for="rgCity">City</label>
+              <div class="input-affix"><span class="affix-ic"><svg class="ic" aria-hidden="true"><use href="#i-pin"></use></svg></span>
+                <input class="input" id="rgCity" name="city" autocomplete="address-level2" placeholder="e.g. Lagos">
+              </div>
+              <span class="err">Enter your city.</span>
+            </div>
+            <div class="field">
+              <label for="rgNote">Delivery note <span style="color:var(--faint);font-weight:600">(optional)</span></label>
+              <div class="input-affix"><span class="affix-ic"><svg class="ic" aria-hidden="true"><use href="#i-info"></use></svg></span>
+                <input class="input" id="rgNote" name="note" placeholder="e.g. Ring the bell twice, gate code…">
+              </div>
+            </div>
+            <div class="field">
+              <label for="rgPass">Password</label>
+              <div class="input-affix">
+                <span class="affix-ic"><svg class="ic" aria-hidden="true"><use href="#i-shield"></use></svg></span>
+                <input class="input" type="password" id="rgPass" name="password" autocomplete="new-password" placeholder="At least 6 characters">
+                <button type="button" class="eye-btn" data-eye="rgPass" aria-label="Show password"><svg class="ic" aria-hidden="true"><use href="#i-eye"></use></svg></button>
+              </div>
+              <span class="err">Password must be at least 6 characters.</span>
+              <div class="pw-meter" aria-hidden="true"><i id="pwMeter"></i></div>
+            </div>
+            <div class="field">
+              <label for="rgPass2">Confirm password</label>
+              <div class="input-affix">
+                <span class="affix-ic"><svg class="ic" aria-hidden="true"><use href="#i-shield"></use></svg></span>
+                <input class="input" type="password" id="rgPass2" name="confirm" autocomplete="new-password" placeholder="Repeat your password">
+                <button type="button" class="eye-btn" data-eye="rgPass2" aria-label="Show password"><svg class="ic" aria-hidden="true"><use href="#i-eye"></use></svg></button>
+              </div>
+              <span class="err">Passwords do not match.</span>
+            </div>
+            <div class="field err-box" id="regErr" hidden></div>
+            <button class="btn btn-primary btn-lg btn-block" type="submit" id="regBtn">Create account</button>
+          </form>
+
+          <p class="auth-foot">Already have an account? <a href="login.html">Sign in</a></p>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="assets/js/vendor/jquery-3.7.1.min.js"></script>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/supabase-config.js"></script>
+  <script src="assets/js/vendor/supabase.js"></script>
+  <script src="assets/js/store.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script src="assets/js/pages/auth.js"></script>
+</body>
+</html>
