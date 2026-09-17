@@ -41,6 +41,7 @@ window.refreshFavoritesPage = (function () {
     if (e.key === 'dishdash_session' || e.key.indexOf('dishdash_favs_') === 0) render();
   });
   window.DD_STORE.on('favs', render);
+  window.DD_STORE.on('foods', render);
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', render);
   else render();

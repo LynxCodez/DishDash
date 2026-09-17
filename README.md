@@ -312,6 +312,40 @@ The maths layer (`summarize`, `revenueByMethod`, `heatmap`, `lagosParts`,
 `csvEscape` …) is pure and DOM-free, exposed read-only as `window.DD_REPORTS_TEST`
 so it can be asserted without a browser.
 
+## Dish management & images (admin)
+
+The add/edit dish form (`admin/foods.js`) takes a real photo instead of a
+stock-photo ID: **drag & drop or click to upload** (JPG/PNG/WebP/GIF up to
+5 MB), or pick from the preset thumbnails, or paste/drag an image URL. The
+file is **resized client-side** (max 900 px, JPEG quality 0.72 — a phone
+photo lands around 15–40 KB) and stored as a data-URL in `foods.img`, which
+is a plain text column in both local mode and Supabase — no storage bucket,
+no schema change.
+
+Everything on the site renders dish images through one function, `D.img()`
+in `data.js`. It now **passes through** `data:` and full `http(s)` URLs and
+only builds an Unsplash URL for a bare photo ID, so uploaded thumbnails flow
+to the menu, dish page, home page, favourites, cart and admin tables with no
+per-page changes.
+
+Other pieces worth knowing:
+
+- **Inline per-field errors** (name/price/description/image) replace the old
+  single toast, and clear as the user fixes each field.
+- **Local-mode quota guard:** `localStorage` fills up silently at ~5 MB;
+  `write()` in `store.js` now reports "Storage is full" instead of pretending
+  the photo saved. Cloud mode has no such limit.
+- **Cloud add-id rule:** `foods.id` is a plain int primary key with no
+  Postgres default, so the client picks `max(id)+1` (same rule as offline
+  mode). A duplicate-id race (two admin consoles saving at once, `23505`)
+  re-pulls the catalog and retries once — the same pattern `placeOrder` uses.
+- **Live refresh:** customer pages (menu, dish detail, home, favourites) and
+  the admin foods table re-render when the `foods` snapshot changes. Pages
+  register listeners at `DOMContentLoaded`, which can fire *after* the cloud
+  boot's first pull, so the cloud layer replays one broadcast after it
+  settles — a fresh dish appears on an already-open menu tab without a
+  manual reload.
+
 ## Phone numbers
 
 One rule, defined once in `store.js` as `validatePhone` and used by every form
@@ -346,11 +380,11 @@ form is what actually lands in storage rather than whatever was typed.
 | 6 | Works in any modern browser | In place by design — no browser-specific APIs; spot-checked, not exhaustively tested |
 | 7 | Browsable homepage when signed out / after logout | Mostly done — one known papercut: the footer's Account column still shows "Sign in" while a session is active |
 | — | Demo launcher & session hygiene | **Done** — isolated demo browser profiles, `?fresh=1` clean start, “Signed in as …” switch-account bar, role-aware landing, stale-session sweep |
-| 8 | Improved dish-adding flow incl. images/thumbnails | Not started |
+| 8 | Improved dish-adding flow incl. images/thumbnails | **Done** — drag-drop/click upload with client-side resize to a web thumbnail, data-URL stored in `foods.img` (both modes), `D.img()` passthrough for any URL, inline per-field errors, local quota guard; add/edit/delete verified end-to-end in cloud mode |
 | — | Order cancellation (customer while pending, admin refuse) | Not started |
 | — | Bulk admin actions (advance many orders at once) | Not started |
 | — | Push-notification simulation on status change | Not started |
-| — | Admin analytics: revenue by method, AOV, peak-hours heatmap | Not started |
+| — | Admin analytics: revenue by method, AOV, peak-hours heatmap | **Done** — all three shipped with the Reports page (item 5) |
 
 ## Order lifecycle
 

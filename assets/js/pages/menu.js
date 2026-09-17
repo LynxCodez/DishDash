@@ -127,6 +127,9 @@
     renderChips();
     render();
     UI.reveal(document);
+    // Cloud boot fills the catalog after first paint — re-render when the
+    // foods snapshot changes (admin adds/edits in another tab, first pull).
+    if (S.on) S.on('foods', render);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

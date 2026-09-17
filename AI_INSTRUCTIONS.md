@@ -271,6 +271,34 @@ order" badge is computed from delivered orders at read time.
 Supabase realtime; in local mode, cross-tab via the `storage` event. Pages
 that show live data should listen to both paths the way `orders.js` does.
 
+**Foods `id` is a plain int PK with NO Postgres default.** The
+`generated always as identity` column in schema.sql is `order_items.id`, not
+`foods` — do not confuse them (it cost an hour once). `addFood` therefore
+computes `max(id)+1` client-side in BOTH modes; never insert into `foods`
+without an explicit id, and never delete `row.id` "to let the DB assign it"
+(→ `23502 not-null`). Insert with `.select().single()` so the normalised row
+comes back. A `23505` duplicate (two admin consoles racing) re-pulls the
+catalog and retries once — mirror the `placeOrder` pattern.
+
+**Page render vs cloud boot race.** Controllers render at
+`DOMContentLoaded`, but the boot `pullCatalog` can finish later; its
+broadcast then hits zero listeners, and pages show a stale snapshot (this
+made a brand-new dish invisible on menu/admin until reload). Two-part
+contract: (a) data-showing pages register `S.on('foods', render)` (menu,
+food detail, home, favourites, admin foods do); (b) the cloud `init()`
+replays one `setTimeout(…, 0)` broadcast for foods/categories/orders after
+it settles, guaranteeing every open page re-renders at least once with the
+fresh snapshot. New pages showing catalog data should follow (a).
+
+**Dish images.** `foods.img` is plain text; the form resizes uploads
+client-side (≤900 px, JPEG q0.72, ~15–40 KB) and stores a data-URL — no
+storage bucket, no schema. `D.img()` in data.js passes through `data:` and
+`http(s)` URLs and only prefixes bare IDs with the Unsplash URL — every
+consumer (menu, food, home, favourites, cart, admin) already routes through
+it, so image handling changes belong in `D.img()` + the form, not per page.
+Local-mode `write()` reports "Storage is full" on QuotaExceededError instead
+of silently dropping the write — keep that guard when touching store.js.
+
 ## 5. Conventions
 
 - Vanilla JS, ES5-ish style, no modules, no transpile: each page's controller
@@ -284,8 +312,10 @@ that show live data should listen to both paths the way `orders.js` does.
 - Seed content only in `data.js`. No hardcoded food/user data anywhere else.
 - jQuery is vendored at `assets/js/vendor/jquery-3.7.1.min.js`; don't add CDNs
   or npm packages (the demo must run offline).
-- Images: Unsplash URLs with emoji/gradient fallbacks (`data.js` `img()`),
-  `onerror="this.remove()"` pattern.
+- Images: `data.js` `img()` handles data-URLs, any http(s) URL, and Unsplash
+  IDs (see section 4). Emoji/gradient fallbacks and `onerror="this.remove()"`
+  stay in place. Uploaded photos are data-URLs produced by the admin form's
+  client-side resize — do not convert them to external hosting for the demo.
 - **Standing rule from the owner (do not skip):** after every significant
   change, update `README.md`, `SETUP-SUPABASE.md` AND this file in the same
   pass — before reporting the work as done. The project is handed between
@@ -335,15 +365,20 @@ exists nowhere in the repo. Git identity is repo-local:
 `LynxCodez <LynxCodez@users.noreply.github.com>`. Credential helper is
 `manager` (GCM 2.7.3) — the first push pops a GitHub login on the owner's
 screen; later pushes reuse the stored credential.
-- Item 8 — **dish-adding flow + image/thumbnail upload**: not started.
+- Item 8 — **dish-adding flow + image/thumbnail upload**: DONE and
+  verified live (2026-09-17, cloud mode): drag-drop/click upload with
+  client-side resize → data-URL in `foods.img`, `D.img()` passthrough, inline
+  field errors, local quota guard, cloud add/edit/delete + menu render all
+  proven in the browser. See section 4 ("Foods `id`" and "Dish images").
 - Admin **review/feedback moderation screen**: DB permits it, no UI.
-- Backlog from an external review, triaged & real: order cancellation
-  (customer while pending / admin refuse), bulk admin actions (advance many
-  orders), push-notification simulation on status change, admin analytics
-  (revenue by payment method, AOV, peak-hours heatmap), XSS audit
-  (ensure UI.esc on every user-generated render), loading states for
-  first cloud fetch. Rejected as stale: print receipt (exists), dark mode
-  and i18n (owner has not asked).
+- Admin analytics: revenue by payment method, AOV, peak-hours heatmap —
+  DONE (shipped with the Reports page).
+- Backlog from an external review, triaged & real (remaining): order
+  cancellation (customer while pending / admin refuse), bulk admin actions
+  (advance many orders), push-notification simulation on status change,
+  XSS audit (ensure UI.esc on every user-generated render), loading states
+  for first cloud fetch. Rejected as stale: print receipt (exists), dark
+  mode and i18n (owner has not asked).
 - Footer Account column shows "Sign in" even while signed in (`ui.js`,
   header/drawer are session-aware, footer is not).
 - Seed order dates in data.js are anchored to **Date.now()** (not a fixed

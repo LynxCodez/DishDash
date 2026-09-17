@@ -10,6 +10,10 @@
 window.DD_DATA = (function () {
   // --- helpers -------------------------------------------------
   function img(id, w) {
+    // Item 8: real uploads arrive as data: URLs and links as http(s) — pass
+    // them straight through; bare ids stay Unsplash photo references.
+    if (!id) return '';
+    if (id.slice(0, 5) === 'data:' || id.slice(0, 4) === 'http' || id.indexOf('/') !== -1) return id;
     return 'https://images.unsplash.com/' + id + '?auto=format&fit=crop&w=' + (w || 800) + '&q=72';
   }
   function naira(n) {

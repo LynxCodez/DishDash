@@ -45,6 +45,9 @@
 
     UI.reveal(document);
     UI.cartUISync(false);
+    // Re-render stats/categories/trending when the cloud catalog lands after
+    // first paint (or an admin edits the menu in another tab).
+    if (S.on) S.on('foods', init);
   }
 
   if (document.readyState === 'loading') {

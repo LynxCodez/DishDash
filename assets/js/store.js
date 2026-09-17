@@ -20,7 +20,14 @@ window.DD_STORE = (function () {
     }
   }
   function write(key, value) {
-    try { localStorage.setItem(P + key, JSON.stringify(value)); } catch (e) { /* storage full/blocked */ }
+    try { localStorage.setItem(P + key, JSON.stringify(value)); return true; }
+    catch (e) {
+      // Item 8: a failed write must not look like success — logged so a
+      // silent no-save (e.g. a big photo overflowing the quota in offline
+      // mode) can be diagnosed instead of mysteriously vanishing.
+      console.error('[store] write failed for "' + key + '" (storage full or blocked):', e);
+      return false;
+    }
   }
   function remove(key) { localStorage.removeItem(P + key); }
 
@@ -1094,6 +1101,14 @@ window.DD_STORE_SYNC = (function () {
     state.connecting = false;
     state.settled = true;
     document.documentElement.dispatchEvent(new CustomEvent('dd:sync-ready'));
+    // One-tick replay: pages register their change listeners at DOMContentLoaded,
+    // which can land AFTER the boot pull's broadcast (slow probe, throttled tab).
+    // Re-announcing after the current task guarantees every open page renders
+    // the fresh cloud snapshot at least once. Re-rendering identical data is
+    // cheap and idempotent.
+    setTimeout(function () {
+      try { S.broadcast('foods'); S.broadcast('categories'); S.broadcast('orders'); } catch (e) { /* noop */ }
+    }, 0);
     return status();
   }
 
@@ -1765,6 +1780,7 @@ window.DD_STORE_SYNC = (function () {
     requestEmailCode, confirmEmailCode, markEmailVerified, resendConfirmationEmail, confirmSignupOtp, lastDemoCode,
     setVerificationMode, verificationMode,
     upsertFood, deleteFood, saveCategories, deleteCategory,
+    foodToDb, foodFromDb,
     toggleFav, getFavIds,
     promoteFirstAdmin, teardown,
     _state: state,
@@ -2034,17 +2050,40 @@ window.DD_CLOUD = (function () {
       return Y.updateOrder(o).then(function () { S.broadcast('orders'); return { ok: true, order: o }; });
     };
     S.addFood = function (data) {
+      // foods.id is a plain int primary key (no identity/default in Postgres),
+      // so the client picks max+1 — same rule as the offline store. Insert with
+      // .select().single() so the DB-normalized row comes back; on the rare
+      // id race (two admin windows), re-pull and retry once, like placeOrder.
       const D = window.DD_DATA;
-      const list = S.foods();
-      const id = Math.max.apply(null, list.map(function (f) { return f.id; }).concat([D.FOODS.length ? Math.max.apply(null, D.FOODS.map(function (f) { return f.id; })) : 0])) + 1;
-      const f = {
-        id: id, cat: data.cat, name: data.name, price: Number(data.price),
-        oldPrice: data.oldPrice ? Number(data.oldPrice) : null,
-        rating: 4.5, reviews: 0, prep: Number(data.prep || 20),
-        tag: data.tag || null, popular: !!data.popular, inStock: !!data.inStock,
-        img: data.img, desc: data.desc
-      };
-      return Y.upsertFood(f).then(function () { return f; });
+      const c = Y._state.client;
+      function attempt() {
+        const list = S.foods();
+        const used = list.map(function (f) { return f.id; })
+          .concat(D.FOODS.length ? D.FOODS.map(function (f) { return f.id; }) : [0]);
+        const id = Math.max.apply(null, used) + 1;
+        const f = {
+          id: id, cat: data.cat, name: data.name, price: Number(data.price),
+          oldPrice: data.oldPrice ? Number(data.oldPrice) : null,
+          rating: 4.5, reviews: 0, prep: Number(data.prep || 20),
+          tag: data.tag || null, popular: !!data.popular, inStock: !!data.inStock,
+          img: data.img, desc: data.desc
+        };
+        const row = Y.foodToDb(f);
+        return c.from('foods').insert(row).select().single()
+          .then(function (res) {
+            const { error, data: r2 } = res;
+            if (error) throw error;
+            return Y.foodFromDb(r2);
+          });
+      }
+      return attempt()
+        .catch(function (err) {
+          if (err && err.code === '23505') return Y.pullCatalog().then(attempt);
+          throw err;
+        })
+        .then(function (created) {
+          return Y.pullCatalog().then(function () { return created; });
+        });
     };
     S.saveFoodOverride = function (f) { return Y.upsertFood(f); };
     S.deleteFoodOverride = function (id) { return Y.deleteFood(id); };

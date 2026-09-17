@@ -349,6 +349,13 @@
   if (S.on) {
     S.on('reviews', function () { if (current) renderReviews(current); });
     S.on('auth', function () { if (current) renderReviews(current); });
+    // A brand-new dish (added in the admin console) has no cached detail —
+    // re-resolve and render once the fresh catalog lands.
+    S.on('foods', function () {
+      if (current) return;
+      const dish = UI.getParam('id') ? S.foods().find(function (f) { return f.id === Number(UI.getParam('id')); }) : null;
+      if (dish) { current = dish; renderDetail(dish); }
+    });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

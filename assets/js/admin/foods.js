@@ -7,6 +7,38 @@
 
   const state = { q: '', cat: 'all', stock: 'all' };
 
+  /* ---------------- image processing (item 8) ----------------
+     Chosen photo is downscaled client-side to a JPEG data-URL
+     (max 900px long edge, ~0.8 quality, ≈80–150KB) so the value
+     fits comfortably in localStorage (offline mode) and in one
+     Postgres text column (cloud mode) without any storage bucket. */
+  var UP = { maxEdge: 900, quality: 0.8, maxBytes: 5 * 1024 * 1024 };
+  var ACCEPTED = { 'image/jpeg': 1, 'image/png': 1, 'image/webp': 1, 'image/gif': 1 };
+
+  function resizeToDataUrl(file) {
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onerror = function () { reject(new Error('Could not read that file.')); };
+      fr.onload = function () {
+        var im = new Image();
+        im.onerror = function () { reject(new Error('That file does not look like an image.')); };
+        im.onload = function () {
+          var scale = Math.min(1, UP.maxEdge / Math.max(im.width, im.height));
+          var w = Math.max(1, Math.round(im.width * scale));
+          var h = Math.max(1, Math.round(im.height * scale));
+          var cv = document.createElement('canvas');
+          cv.width = w; cv.height = h;
+          cv.getContext('2d').drawImage(im, 0, 0, w, h);
+          try { resolve(cv.toDataURL('image/jpeg', UP.quality)); }
+          catch (e) { reject(new Error('This browser could not process that image.')); }
+        };
+        im.src = String(fr.result);
+      };
+      fr.readAsDataURL(file);
+    });
+  }
+
+  /* ---------------- guard & helpers ---------------- */
   function guard() {
     if (!S.requireAdmin()) { UI.go('../login.html?next=admin/foods.html'); return false; }
     return true;
@@ -15,6 +47,7 @@
   function esc(s) { return UI.esc(s); }
   function liveCat(id) { return UI.catOf(id); }
 
+  /* ---------------- list ---------------- */
   function rowHTML(f) {
     const cat = liveCat(f.cat);
     const out = f.inStock === false;
@@ -111,6 +144,39 @@
   }
 
   /* ---------------- add / edit modal ---------------- */
+  const FIELDS = ['mName', 'mPrice', 'mDesc', 'mImg'];
+
+  function clearErrors(modal) {
+    FIELDS.forEach(function (id) {
+      const el = modal.querySelector('#' + id);
+      if (el) el.classList.remove('is-invalid');
+      const box = modal.querySelector('[data-err="' + id + '"]');
+      if (box) box.textContent = '';
+    });
+  }
+
+  function fieldError(modal, id, msg) {
+    const el = modal.querySelector('#' + id);
+    if (el) el.classList.add('is-invalid');
+    const box = modal.querySelector('[data-err="' + id + '"]');
+    if (box) box.textContent = msg;
+  }
+
+  function validate(modal, img) {
+    clearErrors(modal);
+    let bad = false, first = null;
+    const name = modal.querySelector('#mName').value.trim();
+    const price = Number(modal.querySelector('#mPrice').value);
+    const desc = modal.querySelector('#mDesc').value.trim();
+
+    if (name.length < 2) { fieldError(modal, 'mName', 'Give the dish a name (at least 2 characters).'); bad = true; first = first || 'mName'; }
+    if (!price || price < 50) { fieldError(modal, 'mPrice', 'Enter a price of ₦50 or more.'); bad = true; first = first || 'mPrice'; }
+    if (desc.length < 10) { fieldError(modal, 'mDesc', 'Write a short description (at least 10 characters).'); bad = true; first = first || 'mDesc'; }
+    if (!img) { fieldError(modal, 'mImg', 'Add a photo — upload one or pick a preset below.'); bad = true; first = first || 'mImg'; }
+    if (first) { try { modal.querySelector('#' + first).focus(); } catch (e) {} }
+    return !bad;
+  }
+
   function openForm(food) {
     const isNew = !food;
     const cats = S.categories();
@@ -129,9 +195,9 @@
     const curEmoji = food ? (liveCat(food.cat) || {}).emoji : '🍽️';
     const html =
       '<div class="form-grid-2">'
-      + '<div class="field" style="grid-column:1/-1"><label for="mName">Dish name</label><input class="input" id="mName" value="' + esc(food ? food.name : '') + '" placeholder="e.g. Peppered Chicken & Fries"></div>'
+      + '<div class="field" style="grid-column:1/-1"><label for="mName">Dish name</label><input class="input" id="mName" value="' + esc(food ? food.name : '') + '" placeholder="e.g. Peppered Chicken & Fries"><span class="f-err" data-err="mName" role="alert"></span></div>'
       + '<div class="field"><label for="mCat">Category</label><select class="input" id="mCat">' + catOptions + '</select></div>'
-      + '<div class="field"><label for="mPrice">Price (₦)</label><input class="input" id="mPrice" type="number" min="50" step="50" value="' + (food ? food.price : '') + '" placeholder="e.g. 5500"></div>'
+      + '<div class="field"><label for="mPrice">Price (₦)</label><input class="input" id="mPrice" type="number" min="50" step="50" value="' + (food ? food.price : '') + '" placeholder="e.g. 5500"><span class="f-err" data-err="mPrice" role="alert"></span></div>'
       + '<div class="field"><label for="mOld">Was price (₦) <span style="color:var(--faint);font-weight:600">(optional)</span></label><input class="input" id="mOld" type="number" min="0" step="50" value="' + (food && food.oldPrice ? food.oldPrice : '') + '" placeholder="Sale badge"></div>'
       + '<div class="field"><label for="mPrep">Prep time (min)</label><select class="input" id="mPrep">'
       + [5, 10, 15, 20, 25, 30, 35, 40].map(function (p) {
@@ -143,16 +209,24 @@
         return '<option value="' + esc(t) + '"' + (food && food.tag === t ? ' selected' : '') + '>' + (t || 'No badge') + '</option>';
       }).join('') + '</select></div>'
       + '<div class="field" style="grid-column:1/-1"><label for="mDesc">Description</label>'
-      + '<textarea class="input" id="mDesc" rows="3" placeholder="A mouth-watering one or two line description…">' + esc(food ? food.desc : '') + '</textarea></div>'
+      + '<textarea class="input" id="mDesc" rows="3" placeholder="A mouth-watering one or two line description…">' + esc(food ? food.desc : '') + '</textarea><span class="f-err" data-err="mDesc" role="alert"></span></div>'
       + '</div>'
       + '<div class="switch-row"><span class="sw-txt"><b>Available to order</b><span>Show this dish on the customer menu</span></span>'
       + '<input type="checkbox" class="switch" id="mStock" ' + (!food || food.inStock !== false ? 'checked' : '') + '></div>'
       + '<div class="switch-row"><span class="sw-txt"><b>Mark as popular</b><span>Features in "Trending right now" on the homepage</span></span>'
       + '<input type="checkbox" class="switch" id="mPopular" ' + (food && food.popular ? 'checked' : '') + '></div>'
-      + '<div style="margin-top:14px"><label style="font-size:.86rem;font-weight:700;color:var(--ink-2)">Photo <span style="color:var(--faint);font-weight:600">— pick a preset or paste an Unsplash photo id</span></label>'
+      + '<div style="margin-top:14px"><label style="font-size:.86rem;font-weight:700;color:var(--ink-2)">Photo</label>'
+      + '<div class="upload-box" id="mDrop" tabindex="0" role="button" aria-label="Upload a photo: click or drag an image here">'
+      + '<svg class="ic" aria-hidden="true"><use href="#i-image"></use></svg>'
+      + '<b>Drag a photo here, or click to browse</b>'
+      + '<span class="up-hint">JPG, PNG, WebP or GIF · up to 5MB · auto-resized for the web</span>'
+      + '<input type="file" id="mFile" accept="image/jpeg,image/png,image/webp,image/gif" hidden>'
+      + '</div>'
+      + '<div class="field" style="margin-top:10px"><label class="visually-hidden" for="mImg">Photo</label>'
+      + '<input class="input" id="mImg" value="' + esc(food ? food.img : D.GALLERY[0].img) + '" placeholder="Photo — upload above or paste an Unsplash photo id" style="font-family:monospace;font-size:.85rem">'
+      + '<span class="f-err" data-err="mImg" role="alert"></span></div>'
+      + '<div class="preset-label">Or start from a preset</div>'
       + '<div class="preset-thumbs">' + galleryHTML + '</div>'
-      + '<div class="field" style="margin-top:10px"><label class="visually-hidden" for="mImg">Image photo id</label>'
-      + '<input class="input" id="mImg" value="' + esc(food ? food.img : D.GALLERY[0].img) + '" placeholder="photo-…" style="font-family:monospace;font-size:.85rem"></div>'
       + '<div class="img-preview" id="mPrev"><span class="img-emoji">' + curEmoji + '</span>'
       + '<img id="mPrevImg" src="' + (food ? D.img(food.img, 400) : D.img(D.GALLERY[0].img, 400)) + '" alt="Preview" onerror="this.remove()"></div>'
       + '</div>';
@@ -165,23 +239,83 @@
     });
     modal.querySelector('[data-cancel]').addEventListener('click', function () { modal.close(); });
 
-    // image preview + preset selection
+    /* ---- photo handling ---- */
     const imgInput = modal.querySelector('#mImg');
     const prevImg = modal.querySelector('#mPrevImg');
     const prevEmoji = modal.querySelector('#mPrev .img-emoji');
+    const drop = modal.querySelector('#mDrop');
+    const fileInput = modal.querySelector('#mFile');
+    let lastError = '';
+
+    function showUploadError(msg) {
+      lastError = msg;
+      fieldError(modal, 'mImg', msg);
+      drop.classList.add('img-err');
+      try { drop.focus(); } catch (e) {}
+    }
+
     function updatePreview() {
       const id = imgInput.value.trim();
+      const isData = id.slice(0, 5) === 'data:';
       if (id) {
-        prevImg.src = D.img(id, 400);
         prevImg.style.display = '';
-        prevImg.onerror = function () { prevImg.remove(); };
+        prevImg.onerror = function () {
+          prevImg.style.display = 'none';
+          prevEmoji.style.display = '';
+          if (!isData) showUploadError('That photo reference could not be loaded.');
+        };
+        prevImg.onload = function () {
+          prevEmoji.style.display = 'none';
+          if (lastError) { lastError = ''; clearErrors(modal); drop.classList.remove('img-err'); }
+        };
+        prevImg.src = isData ? id : D.img(id, 400);
       } else {
         prevImg.style.display = 'none';
+        prevEmoji.style.display = '';
       }
       // emoji from chosen category
       const catId = modal.querySelector('#mCat').value;
       prevEmoji.textContent = (UI.catOf(catId) || {}).emoji || '🍽️';
     }
+
+    function handleFile(file) {
+      if (!file) return;
+      if (!ACCEPTED[file.type]) { showUploadError('Please choose a JPG, PNG, WebP or GIF image.'); return; }
+      if (file.size > UP.maxBytes) { showUploadError('That file is over 5MB — pick a smaller photo.'); return; }
+      resizeToDataUrl(file).then(function (dataUrl) {
+        imgInput.value = dataUrl;
+        lastError = '';
+        clearErrors(modal);
+        drop.classList.remove('img-err');
+        updatePreview();
+        UI.toast('Photo ready', 'Resized and attached to the dish.');
+      }).catch(function (err) {
+        showUploadError(err && err.message ? err.message : 'Could not process that image.');
+      });
+    }
+
+    drop.addEventListener('click', function () { fileInput.click(); });
+    drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+    fileInput.addEventListener('change', function () { handleFile(fileInput.files && fileInput.files[0]); fileInput.value = ''; });
+    ['dragenter', 'dragover'].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); drop.classList.add('drag'); });
+    });
+    ['dragleave', 'drop'].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); drop.classList.remove('drag'); });
+    });
+    drop.addEventListener('drop', function (e) {
+      const dt = e.dataTransfer;
+      const f = dt && dt.files && dt.files[0];
+      if (f) handleFile(f);
+      else {
+        const url = dt && dt.getData && dt.getData('text/uri-list') || dt && dt.getData && dt.getData('text') || '';
+        if (url && (url.indexOf('http') === 0 || url.indexOf('data:') === 0)) {
+          imgInput.value = url.trim();
+          updatePreview();
+        }
+      }
+    });
+
     imgInput.addEventListener('input', updatePreview);
     modal.querySelector('#mCat').addEventListener('change', updatePreview);
     modal.querySelectorAll('[data-preset]').forEach(function (th) {
@@ -189,10 +323,24 @@
         modal.querySelectorAll('.preset-th').forEach(function (x) { x.classList.remove('selected'); });
         th.classList.add('selected');
         imgInput.value = th.getAttribute('data-preset');
+        lastError = '';
+        clearErrors(modal);
+        drop.classList.remove('img-err');
         updatePreview();
       });
     });
 
+    /* ---- live error clearing ---- */
+    ['mName', 'mPrice', 'mDesc'].forEach(function (id) {
+      const el = modal.querySelector('#' + id);
+      el.addEventListener('input', function () {
+        el.classList.remove('is-invalid');
+        const box = modal.querySelector('[data-err="' + id + '"]');
+        if (box) box.textContent = '';
+      });
+    });
+
+    /* ---- save ---- */
     modal.querySelector('[data-save]').addEventListener('click', function () {
       const name = modal.querySelector('#mName').value.trim();
       const price = Number(modal.querySelector('#mPrice').value);
@@ -202,33 +350,36 @@
       const oldPrice = modal.querySelector('#mOld').value ? Number(modal.querySelector('#mOld').value) : null;
       const prep = Number(modal.querySelector('#mPrep').value);
       const tag = modal.querySelector('#mTag').value || null;
-      let bad = false;
-      if (name.length < 2) bad = true;
-      if (!price || price < 50) bad = true;
-      if (desc.length < 10) bad = true;
-      if (!img) bad = true;
-      if (bad) {
-        UI.toast('Missing details', 'Name, price (₦50+), description and a photo are required.', 'error');
+      if (!validate(modal, img)) {
+        UI.toast('Almost there', 'Fix the highlighted fields, then save.', 'error');
         return;
       }
-      if (isNew) {
-        Promise.resolve(S.addFood({ name: name, price: price, cat: cat, desc: desc, img: img, oldPrice: oldPrice, prep: prep, tag: tag, popular: modal.querySelector('#mPopular').checked, inStock: modal.querySelector('#mStock').checked })).then(function () {
-          UI.toast('Dish added 🎉', name + ' is now live on the menu.');
-          render();
-        });
-      } else {
-        Promise.resolve(S.saveFoodOverride(Object.assign({}, food, {
-          name: name, price: price, cat: cat, desc: desc, img: img,
-          oldPrice: oldPrice, prep: prep, tag: tag,
-          popular: modal.querySelector('#mPopular').checked,
-          inStock: modal.querySelector('#mStock').checked
-        }))).then(function () {
-          UI.toast('Changes saved', name + ' was updated.');
-          render();
-        });
-      }
-      modal.close();
+      const payload = {
+        name: name, price: price, cat: cat, desc: desc, img: img,
+        oldPrice: oldPrice, prep: prep, tag: tag,
+        popular: modal.querySelector('#mPopular').checked,
+        inStock: modal.querySelector('#mStock').checked
+      };
+      const btn = modal.querySelector('[data-save]');
+      btn.disabled = true;
+      const done = function (okMsg, okBody) {
+        btn.disabled = false;
+        UI.toast(okMsg, okBody);
+        modal.close();
+        render();
+      };
+      const fail = function (err) {
+        btn.disabled = false;
+        const msg = (err && err.message) ? err.message : 'Could not save — please try again.';
+        UI.toast('Not saved', msg, 'error');
+      };
+      let p;
+      if (isNew) p = Promise.resolve(S.addFood(payload)).then(function () { done('Dish added 🎉', name + ' is now live on the menu.'); });
+      else p = Promise.resolve(S.saveFoodOverride(Object.assign({}, food, payload))).then(function () { done('Changes saved', name + ' was updated.'); });
+      p.catch(fail);
     });
+
+    updatePreview();
   }
 
   function init() {
@@ -245,6 +396,9 @@
     document.getElementById('stockFilter').addEventListener('change', function () { state.stock = this.value; render(); });
     document.getElementById('addFoodBtn').addEventListener('click', function () { openForm(null); });
     render();
+    // Cloud boot can finish after first paint — re-render when the fresh
+    // catalog lands (also picks up edits made in another admin tab).
+    if (S.on) S.on('foods', function () { render(); });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
