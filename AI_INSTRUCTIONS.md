@@ -51,7 +51,14 @@ There is no `npm test`. The established verification pattern is:
    (`PGRST204` "could not find the 'x' column", `42703` "column does not
    exist") and assert what the app sends. This is how the missing-column
    behaviour below was proven without a single live write.
-6. ⚠️ **Do NOT blank `supabase-config.js` to force local mode.** It is the one
+7. The demo is launched with **`start-demo.bat`** (double-click). It starts the
+   server, opens Chrome as the customer and Edge as the admin — each in an
+   isolated `demo-profile\<browser>` folder and each starting signed out
+   (`login.html?fresh=1`). Prefer it for walkthroughs: it removes the two things
+   that make a browser test lie to you, a leftover session and autofilled
+   credentials. `demo-profile/` is gitignored; deleting it gives a
+   factory-clean browser.
+8. ⚠️ **Do NOT blank `supabase-config.js` to force local mode.** It is the one
    file in this project that holds a value the AI cannot regenerate (the anon
    key), and on 2026-09-16 blanking it for a walkthrough **destroyed the key**
    — there is no git repo here and no backup, so the owner had to re-paste it
@@ -88,6 +95,43 @@ There is no `npm test`. The established verification pattern is:
   and verified (a read-only `curl` to `/rest/v1/foods` returns 200 with it).
 
 ## 4. Facts that will bite you if you skip them
+
+**Sessions outlive the browser window — this is what breaks demo runs.**
+- A Supabase session is persisted in `localStorage`, so closing Chrome does
+  **not** sign anyone out. A second run of the demo opens already signed in as
+  whoever used it last, which is exactly how the owner got stuck unable to
+  register a fresh account.
+- Three keys can each hold an account and `S.logout()` only clears the layer
+  that is live: `dishdash_session` (local store), `dishdash_session_hint`
+  (cloud optimistic hint), `dishdash_cloud_session` (cloud profile cache).
+  Anything that claims to "sign out" must clear **all three** — see
+  `SESSION_KEYS` / `wipeSessionCaches()` in `pages/auth.js`. A leftover
+  `dishdash_session` resurrects a ghost local user on any boot that falls back
+  to local mode (no venue Wi-Fi).
+- **`?fresh=1` on `login.html` is the contract the launcher relies on:** wait
+  for the cloud layer to settle, sign out, sweep those keys, strip the flag with
+  `history.replaceState`, then paint. Do not reorder that work after the banner
+  or make it fire on every load.
+- A pre-filled email/password on the sign-in form is the **browser's password
+  manager**, never the app (`auth.js` deliberately leaves the form empty). The
+  only reliable fix is not using that browser profile — hence
+  `demo-profile\chrome` / `demo-profile\edge` in `start-demo.bat`. Do not add
+  `autocomplete="off"` hacks and call it solved.
+- **Landing must be role-aware.** `nextUrl()` in `auth.js` honours `?next=` only
+  inside the area the role can use: admins always land on `admin/index.html`,
+  customers never land in `admin/`. Before this, the launcher's admin URL sent a
+  customer into admin → login → admin forever.
+- **Registering while an account is already signed in:** in link mode Supabase
+  returns no session, so the *previous* account stays live and `verify.html`
+  would read it (already confirmed) and show "you are all set" for the wrong
+  address. The cloud `registerUser` therefore signs the old session out, and
+  `verify.js` prefers a `?email=` that differs from the live session. Keep both —
+  either alone still leaves a confusing screen.
+- **`identities: []` means "email already registered"** when "Confirm email" is
+  ON. Supabase returns a *placeholder* user (and sends nothing) to prevent
+  account enumeration; the app checks `created.user.identities.length === 0` and
+  answers with a "Sign in instead" link. Proven live with an anon-key
+  `POST /auth/v1/signup` probe.
 
 **Email verification (`store.js`).**
 - `emailVerified()` intentionally trusts Supabase's `emailConfirmed` **only

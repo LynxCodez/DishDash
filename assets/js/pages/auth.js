@@ -17,10 +17,123 @@
   }
   function isEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v); }
 
+  function roleHome(user) {
+    return user && user.role === 'admin' ? 'admin/index.html' : 'index.html';
+  }
+
+  /* Where to send someone once they are signed in.
+     The landing page must never fight the account's role. The demo launcher
+     used to hand the admin window a ?next=admin/... URL, so a *customer*
+     signing in there bounced admin → login → admin forever, while an admin
+     opening the customer link was dumped on the shop side. The role decides
+     first and ?next is only honoured inside the area that role can use.   */
   function nextUrl(user) {
     const next = UI.getParam('next');
-    if (next && next.indexOf('http') !== 0) return next;
-    return user.role === 'admin' ? 'admin/index.html' : 'index.html';
+    const home = roleHome(user);
+    // in-app relative paths only: no http(s)://, no //host, no ".." traversal
+    if (!next || next.indexOf('..') !== -1 || /^([a-z]+:)?\/\//i.test(next)) return home;
+    const wantsAdmin = next.indexOf('admin/') === 0;
+    if (user && user.role === 'admin') return wantsAdmin ? next : home;
+    return wantsAdmin ? home : next;
+  }
+
+  /* ---------------- session housekeeping ----------------
+     A Supabase session lives in the browser's localStorage and OUTLIVES the
+     window — closing Chrome does not sign anyone out — so the next launch of
+     the demo opened already signed in as whoever used it last, with no way to
+     tell or to switch. Two mechanisms close that hole for good:
+       • ?fresh=1 (what the launcher passes) signs out before showing the form
+       • the banner below makes a live session visible and switchable by hand  */
+  function authReady() {
+    return window.DD_STORE_SYNC && window.DD_STORE_SYNC.whenAuthReady
+      ? Promise.resolve(window.DD_STORE_SYNC.whenAuthReady()).catch(function () {})
+      : Promise.resolve();
+  }
+
+  function dropFreshParam() {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('fresh');
+      window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+    } catch (e) { /* older browser: the flag stays in the URL, which is harmless */ }
+  }
+
+  /* Every place this app can remember an account, in one list: the local
+     store's own session, the cloud layer's optimistic hint, and the cloud
+     layer's cached profile. S.logout() clears whichever layer is live but not
+     the other layer's key — so signing out here sweeps all three. Without it a
+     boot that falls back to local mode (no Wi-Fi at the venue, say) can
+     resurrect the previous account straight out of a cache. */
+  const SESSION_KEYS = ['dishdash_session', 'dishdash_session_hint', 'dishdash_cloud_session'];
+  function wipeSessionCaches() {
+    SESSION_KEYS.forEach(function (k) {
+      try { localStorage.removeItem(k); } catch (e) { /* storage blocked */ }
+    });
+  }
+
+  function signOut() {
+    wipeSessionCaches();
+    // Runs after the cloud layer settles, so this clears whichever layer is
+    // authoritative (the Supabase session, or the local session in local mode).
+    return Promise.resolve(S.logout());
+  }
+
+  function clearStaleSession() {
+    if (!UI.getParam('fresh')) return Promise.resolve(false);
+    dropFreshParam();
+    return signOut()
+      .then(function () { return true; })
+      .catch(function () { return false; });
+  }
+
+  /* The visible "you are still signed in" row. It sits above the form so the
+     page can never look like a blank sign-in screen while an account is active
+     — and switching accounts becomes one click instead of a hidden menu.     */
+  function mountSessionBanner(form) {
+    if (!form || !form.parentNode) return;
+    let el = null;
+
+    function paint() {
+      const u = S.currentUser();
+      if (!u) {
+        if (el) { el.hidden = true; el.innerHTML = ''; }
+        return;
+      }
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'sessionBanner';
+        el.className = 'session-banner';
+        form.parentNode.insertBefore(el, form);
+      }
+      el.hidden = false;
+      el.innerHTML =
+        '<span class="sb-ic">' + UI.ic('user') + '</span>'
+        + '<div class="sb-txt"><b>Signed in as ' + UI.esc(u.name || 'your account') + '</b>'
+        +   '<span>' + UI.esc(u.email || '') + '</span></div>'
+        + '<div class="sb-act">'
+        +   '<a class="btn btn-outline btn-sm" href="' + UI.esc(nextUrl(u)) + '">Continue</a>'
+        +   '<button type="button" class="btn btn-ghost btn-sm" id="sbOut" style="color:var(--err)">Sign out</button>'
+        + '</div>';
+
+      const out = el.querySelector('#sbOut');
+      out.addEventListener('click', function () {
+        out.disabled = true;
+        out.textContent = 'Signing out…';
+        signOut()
+          .then(function () {
+            UI.toast('Signed out', 'Sign in with a different account whenever you are ready.');
+            paint();
+          })
+          .catch(function (e) {
+            out.disabled = false;
+            out.textContent = 'Sign out';
+            UI.toast('Could not sign out', (e && e.message) || 'Please try again.', 'error');
+          });
+      });
+    }
+
+    paint();
+    if (S.on) S.on('auth', paint);
   }
 
   function bindEye() {
@@ -201,7 +314,13 @@
             if (!res.ok) {
               errBox.hidden = false;
               errBox.style.display = 'block';
-              errBox.textContent = res.error;
+              // An address that is already registered is the one failure the
+              // customer can actually act on, so point them at the sign-in form
+              // rather than leaving them on a page that will keep refusing.
+              errBox.innerHTML = UI.esc(res.error)
+                + (res.existing
+                  ? ' <a href="login.html" style="font-weight:800;text-decoration:underline">Sign in instead</a>'
+                  : '');
               errBox.style.color = 'var(--err)';
               setErr('rgEmail', true);
               btn.disabled = false;
@@ -239,8 +358,21 @@
 
   function init() {
     const page = document.body.getAttribute('data-page');
+    const formId = page === 'login' ? 'loginForm' : (page === 'register' ? 'regForm' : '');
+    const form = formId ? document.getElementById(formId) : null;
+
+    // Bind the form synchronously first: housekeeping below waits for the cloud
+    // layer to settle, and a slow connection must never leave the sign-in
+    // button unresponsive.
     if (page === 'login') initLogin();
     else if (page === 'register') initRegister();
+
+    if (form) {
+      authReady()
+        .then(clearStaleSession)
+        .then(function () { mountSessionBanner(form); })
+        .catch(function () { mountSessionBanner(form); });
+    }
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

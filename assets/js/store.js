@@ -99,7 +99,9 @@ window.DD_STORE = (function () {
 
   function registerUser(data) {
     // data: {name,email,phone,password}
-    if (findByEmail(data.email)) return { ok: false, error: 'An account with this email already exists.' };
+    // `existing` lets the register page offer a link to the sign-in form instead
+    // of leaving the customer on a page that will keep refusing them.
+    if (findByEmail(data.email)) return { ok: false, existing: true, error: 'An account with this email already exists.' };
     const phone = validatePhone(data.phone, { required: false });
     if (!phone.ok) return { ok: false, error: phone.error };
     const list = users();
@@ -1140,12 +1142,32 @@ window.DD_STORE_SYNC = (function () {
     }
     if (!created.user) return { ok: false, error: 'Registration failed — please try again.' };
 
+    /* With "Confirm email" switched on, Supabase deliberately hides whether an
+       address is already taken: it answers with a placeholder user whose
+       identities array is empty and sends no mail at all. Unchecked, someone
+       re-using an address waits forever for a confirmation that never comes. */
+    if (Array.isArray(created.user.identities) && created.user.identities.length === 0) {
+      return { ok: false, existing: true, error: 'An account with this email already exists.' };
+    }
+
     /* No session means the project is configured to email a confirmation link
        before the account becomes usable. RLS blocks profile reads and writes
        until that link is opened, so hand back what we already know and let
        verify.html explain the inbox round-trip. */
     if (!created.session) {
       setVerificationMode('link');
+      /* A previous account can still be signed in on this browser — a Supabase
+         session survives closing the window. Leaving it live makes verify.html
+         read the OLD account (already confirmed) and tell the customer they are
+         "all set" for the wrong address, so sign it out here: the confirmation
+         step must belong to the account just created. */
+      try {
+        const prev = await c.auth.getSession();
+        if (prev && prev.data && prev.data.session) {
+          await c.auth.signOut();
+          shadowWrite('session', null);
+        }
+      } catch (e) { /* offline, or already gone — verify.html handles the rest */ }
       return {
         ok: true, pendingEmail: true, verificationMode: 'link',
         user: {

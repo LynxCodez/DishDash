@@ -680,6 +680,15 @@ input[type=checkbox].switch:checked::after{left:21px}
 .auth-card h1{font-size:1.8rem;letter-spacing:-.02em}
 .auth-card .a-sub{color:var(--muted);margin:8px 0 28px;font-size:.97rem}
 .auth-card .btn-block{margin-top:6px}
+/* Live-session notice on the auth pages: a Supabase session survives closing
+   the browser, so the sign-in form has to say when one is still active. */
+.session-banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--acc-50);border:1px solid var(--acc-200);border-radius:13px;padding:12px 14px;margin:0 0 18px;animation:panelIn .24s ease}
+.session-banner .sb-ic{width:34px;height:34px;flex:none;border-radius:50%;background:var(--surface);border:1px solid var(--acc-200);color:var(--acc-700);display:flex;align-items:center;justify-content:center}
+.session-banner .sb-txt{display:flex;flex-direction:column;min-width:0;flex:1}
+.session-banner .sb-txt b{font-size:.92rem}
+.session-banner .sb-txt span{font-size:.82rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.session-banner .sb-act{display:flex;gap:8px;flex:none}
+@media (max-width:520px){.session-banner .sb-act{width:100%}.session-banner .sb-act .btn{flex:1}}
 .auth-alt{display:flex;align-items:center;gap:14px;color:var(--faint);font-size:.82rem;font-weight:700;margin:22px 0;text-transform:uppercase;letter-spacing:.06em}
 .auth-alt::before,.auth-alt::after{content:"";flex:1;height:1px;background:var(--line)}
 .demo-quick{display:grid;grid-template-columns:1fr 1fr;gap:10px}

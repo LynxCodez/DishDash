@@ -34,6 +34,50 @@ See `supabase/schema.sql` (core) and `supabase/reviews-schema.sql`
 
 Use the “demo account” buttons on the sign-in page for one-click access.
 
+## Start the demo (one double-click)
+
+`start-demo.bat` starts the server, waits for it to answer, then opens **Chrome**
+as the customer and **Edge** as the admin. Both windows share one live Supabase
+dataset, so an order placed in Chrome appears in Edge instantly.
+
+Each browser runs from **its own profile folder** (`demo-profile\chrome`,
+`demo-profile\edge`), which is what makes a presentation reproducible:
+
+- **nothing autofills** — no saved password for `localhost:5173` is offered
+- **no account leaks between runs** — the launcher adds `?fresh=1`, and the page
+  signs out whatever the previous run left behind before showing the form
+- **your everyday Chrome/Edge is untouched** — your bookmarks, extensions and
+  personal tabs never end up on screen
+
+Delete the `demo-profile` folder any time to hand yourself a factory-clean demo
+browser. It is gitignored (it is browser cache, never committed). If you would
+rather demo in your normal browser profile, drop `?fresh=1` from a line in the
+`.bat` — the bar described below still lets you switch accounts by hand.
+
+### Why a leftover account can appear at all
+
+A Supabase session lives in the browser's `localStorage` and **outlives the
+window**: closing Chrome does not sign anyone out, so a second run would open
+already signed in as whoever used it last. Two mechanisms cover that:
+
+- **`?fresh=1`** signs out and sweeps every session key before painting the form.
+  It clears all three namespaces — the local store's session, the cloud layer's
+  optimistic hint, and the cloud layer's cached profile — so a later boot that
+  falls back to local mode (no venue Wi-Fi) cannot resurrect a ghost account
+  either.
+- **While any session is live**, `login.html` and `register.html` show a
+  **“Signed in as …”** bar with **Continue** and **Sign out**, so nobody is left
+  staring at a blank form that keeps refusing the account they are trying to
+  create.
+
+### Where each role lands after signing in
+
+- An **admin** always lands in the admin console (`admin/index.html`) — including
+  when the URL asked for a customer page.
+- A **customer** lands on whatever `?next=` asked for, **unless** it points into
+  `admin/`; then they land on their own home instead of bouncing
+  admin → login → admin forever.
+
 ## Pages
 
 **Customer** — Home · Menu (search/filter/sort/pagination) · Dish detail
@@ -145,6 +189,14 @@ is displayed in the app, so it demonstrates the *flow* — generation, expiry,
 attempt limits, the gate — but not ownership of the inbox. Only the email-link
 mode with custom SMTP configured proves that. Describe it as *simulated delivery,
 real verification logic*.
+
+**Re-using an address is detected, not silently swallowed.** With “Confirm
+email” ON, Supabase deliberately hides whether an address is already registered:
+it answers with a placeholder user (empty `identities`) and sends no mail at all.
+Left unchecked you would wait forever for a confirmation that never arrives — so
+the app detects that shape and says *“An account with this email already exists”*
+with a **Sign in instead** link. (Verified against the live project: the anon-key
+sign-up probe returns `identities: []` with no session.)
 
 **Existing accounts are grandfathered.** `verification-schema.sql` marks every
 account that already exists as verified, and `data.js` does the same for the
@@ -264,6 +316,7 @@ form is what actually lands in storage rather than whatever was typed.
 | 5 | Reports system | **Done** — admin **Reports** page: period filter (7/30 days, month, all), revenue/orders/AOV/items cards with vs-previous deltas, revenue by payment method (paid money only), 7×24 peak-hours heatmap in Lagos time, CSV export |
 | 6 | Works in any modern browser | In place by design — no browser-specific APIs; spot-checked, not exhaustively tested |
 | 7 | Browsable homepage when signed out / after logout | Mostly done — one known papercut: the footer's Account column still shows "Sign in" while a session is active |
+| — | Demo launcher & session hygiene | **Done** — isolated demo browser profiles, `?fresh=1` clean start, “Signed in as …” switch-account bar, role-aware landing, stale-session sweep |
 | 8 | Improved dish-adding flow incl. images/thumbnails | Not started |
 | — | Order cancellation (customer while pending, admin refuse) | Not started |
 | — | Bulk admin actions (advance many orders at once) | Not started |

@@ -396,6 +396,15 @@
       else renderNeedSignIn();
       return;
     }
+    /* A *different* account still signed in on this browser must not hijack the
+       screen. Straight after registering, the live session belongs to whoever
+       was signed in before (Supabase issues none until the link is opened), and
+       that account is usually already confirmed — showing it "you are all set"
+       hides the one step the new account actually needs. */
+    if (pendingEmail && String(pendingEmail).toLowerCase() !== String(user.email || '').toLowerCase()) {
+      renderAwaitLink(pendingEmail);
+      return;
+    }
     if (S.emailVerified(user)) { renderAlreadyVerified(user); return; }
     // 'link' mode needs a real inbox; anything else is the in-app demo code.
     if (S.verificationMode() === 'link') { renderLinkPanel(user); return; }

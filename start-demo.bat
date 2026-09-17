@@ -9,6 +9,17 @@ rem    3. opens Chrome  as the CUSTOMER (demo@dishdash.ng)
 rem    4. opens Edge    as the ADMIN    (admin@dishdash.ng)
 rem  Both browsers share ONE live Supabase dataset - orders placed
 rem  in Chrome appear in Edge instantly (that is the whole demo).
+rem
+rem  CLEAN START: each browser runs from its own profile folder
+rem  (demo-profile\chrome and demo-profile\edge), so the demo never
+rem  inherits saved passwords or a leftover sign-in from a previous
+rem  run - and your everyday Chrome/Edge profile is never touched.
+rem  Delete the demo-profile folder any time to hand yourself a
+rem  factory-clean demo browser.
+rem
+rem  ?fresh=1 tells the site to sign out whatever the last run left
+rem  behind before it shows the form. Remove it from a line if you
+rem  would rather stay signed in between runs.
 rem ============================================================
 
 cd /d "%~dp0"
@@ -45,20 +56,29 @@ goto waitloop
 echo         Site is live.
 
 echo   [3/3] Opening the demo browsers...
-rem -- customer window: Chrome
-start "" chrome.exe --new-window "http://localhost:5173/login.html?next=menu.html" 2>nul
-if %errorlevel% neq 0 start "" "http://localhost:5173/login.html?next=menu.html"
+set "SITE=http://localhost:5173"
 
-rem -- admin window: Edge
-start "" msedge.exe --new-window "http://localhost:5173/login.html?next=admin/index.html" 2>nul
-if %errorlevel% neq 0 start "" "http://localhost:5173/login.html?next=admin/index.html"
+rem -- customer window: Chrome, its own profile + a signed-out start
+set "CHROME_PROFILE=%~dp0demo-profile\chrome"
+start "" chrome.exe --user-data-dir="%CHROME_PROFILE%" --no-first-run --no-default-browser-check --new-window "%SITE%/login.html?fresh=1&next=menu.html" 2>nul
+if %errorlevel% neq 0 start "" "%SITE%/login.html?fresh=1&next=menu.html"
+
+rem -- admin window: Edge, its own profile. No ?next needed here: the site
+rem    sends an admin account straight to the console and a customer to the
+rem    shop, so signing in with the wrong account cannot bounce or mislead.
+set "EDGE_PROFILE=%~dp0demo-profile\edge"
+start "" msedge.exe --user-data-dir="%EDGE_PROFILE%" --no-first-run --no-default-browser-check --new-window "%SITE%/login.html?fresh=1" 2>nul
+if %errorlevel% neq 0 start "" "%SITE%/login.html?fresh=1"
 
 echo.
-echo   Done! Two windows opened:
+echo   Done! Two windows opened, each signed out and ready:
 echo     - Chrome  = customer  (demo@dishdash.ng / demo1234)
 echo     - Edge    = admin     (admin@dishdash.ng / admin123)
 echo   Sign in on each side and place an order in Chrome - it will
-echo   appear in Edge instantly.
+echo   appear in Edge instantly. Admin sign-in lands on the console.
+echo.
+echo   Still signed in as someone from a previous run? The page shows
+echo   a "Signed in as ..." bar with a one-click Sign out.
 echo.
 echo   To stop the demo: close the minimized "DishDash server" window.
 echo.

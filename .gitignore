@@ -7,6 +7,9 @@ server.log
 node_modules/
 .idea/
 
+# Dedicated demo browser profiles (Chrome/Edge cache, created by start-demo.bat)
+demo-profile/
+
 # OS junk (Windows/Mac files that mean nothing to git)
 Thumbs.db
 .DS_Store

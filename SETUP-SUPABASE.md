@@ -116,16 +116,26 @@ bank transfer, so the admin sees the holder name and how it was checked in the
 
 ## Step 7 — The cross-browser demo 🎉
 
+**Easiest path:** double-click `start-demo.bat`. It starts the server, waits for
+it, then opens Chrome as the customer and Edge as the admin — each in its own
+profile folder and each starting signed out, so the demo is repeatable. Sign in
+on both windows and continue below.
+
+Or do it by hand:
+
 - **Browser A** (e.g. Chrome): open `http://localhost:5173/`, sign in as
   `demo@dishdash.ng` / `demo1234`, place a COD order.
 - **Browser B** (e.g. Firefox): open `http://localhost:5173/admin/`, sign in as
-  `admin@dishdash.ng` / `admin123`. The order is already there — advance it through
+  `admin@dishdash.ng` / `admin123`. An admin sign-in always lands on the console,
+  wherever you signed in from. The order is already there — advance it through
   Confirmed → Preparing → Out for Delivery → Delivered, click **Confirm payment**.
 - Watch browser A: the customer's order page and status toasts update **live**.
   No refresh needed anywhere.
 
 Sessions also cross browsers now (Supabase Auth), and no passwords or card data are
-stored in the browser.
+stored in the browser. A session **survives closing the window**, so if you land on
+a signed-in page you did not expect, use the **“Signed in as …” → Sign out** bar on
+the sign-in page, or open `login.html?fresh=1` for a guaranteed clean start.
 
 ---
 
@@ -159,5 +169,8 @@ stored in the browser.
 | Email link lands on a dead page | Set Site URL to `http://localhost:5173` and demo on that exact port |
 | Demo account can no longer order | Should not happen — accounts are grandfathered. Check the Step 5 migration actually ran |
 | Admin's Verify Payment dialog shows no paying-account details | Step 6 not run — the `orders.pay_account` column is missing, so cloud mode drops the snapshot by design |
+| Demo starts already signed in as the previous account | Expected: a Supabase session outlives the window. `start-demo.bat` opens `login.html?fresh=1` (clean start); otherwise use **Sign out** in the “Signed in as …” bar |
+| Sign-in form arrives pre-filled with someone's email and password | Browser password manager autofill for `localhost:5173`, not the app. It never pre-fills. `start-demo.bat` avoids it by using isolated `demo-profile\` browsers |
+| Registering an address that already exists seems to succeed but no email arrives | Fixed in-app: cloud mode detects Supabase's placeholder user (empty `identities`) and offers a **Sign in instead** link |
 | "Paying account" never resolves / "Could not verify that account" | The account number or bank selection is wrong — a NUBAN is exactly 10 digits for the bank you picked |
 | Check digit says "did not match" on a real account | Expected for some accounts and all wallet providers; it is a caution, not a gate. The transfer still proceeds |
