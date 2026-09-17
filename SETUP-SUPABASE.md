@@ -140,7 +140,37 @@ bank transfer, so the admin sees the holder name and how it was checked in the
 > tracking and admin verification all keep working — you just lose the account
 > snapshot in cloud mode. (Local mode always stores it.)
 
-## Step 7 — The cross-browser demo 🎉
+## Step 7 — One-time promo codes (30 sec)
+
+Open **SQL Editor → New query**, paste **`supabase/promo-schema.sql`**, and
+**Run**. It creates `promo_redemptions` (one row per account + code, the unique
+constraint *is* the rule) and is safe to re-run.
+
+This is what makes `DISHWELCOME` genuinely **one-time per account**: spend it on
+a phone and it is spent on the laptop too. Cancelling the order that used it
+deletes the row, so the code comes back rather than being burned.
+
+> **Skipping this does not break the demo.** A missing table is detected at boot
+> (one console warning, no error) and the app falls back to a per-browser record
+> keyed to the account id — still one-time, just not across devices. Ordering is
+> never blocked by the absence of this table.
+
+## Step 8 — Customer order cancellation (30 sec)
+
+Open **SQL Editor → New query**, paste **`supabase/cancel-schema.sql`**, and
+**Run**. It adds one narrow RLS policy: a customer may flip their **own
+`pending`** order to `cancelled`, and nothing else.
+
+> **Do not skip this one if you want to demo cancellation in cloud mode.**
+> `schema.sql` granted UPDATE on `orders` to **admins only**, so a customer's
+> cancel matched zero rows — and PostgREST reports a zero-row update as
+> *success* (HTTP 200, `error: null`). The button would have appeared to work
+> while the order stayed pending. The app now asks PostgREST for the affected
+> rows back and fails loudly instead of lying, so if the policy is missing you
+> get a clear error message naming this file, not a silent no-op. No new columns
+> are needed — the reason and the actor ride inside `status_history`.
+
+## Step 9 — The cross-browser demo 🎉
 
 **Easiest path:** double-click `start-demo.bat`. It starts the server, waits for
 it, then opens Chrome as the customer and Edge as the admin — each in its own
@@ -177,12 +207,24 @@ the sign-in page, or open `login.html?fresh=1` for a guaranteed clean start.
 - Security: customers can only read/write **their own** orders and favourites;
   only admins can edit the menu or advance orders; no client can self-promote to
   admin (a one-time bootstrap exception lets the first admin claim the role).
+  The one deliberate exception is cancellation: a customer may move their own
+  `pending` order to `cancelled` (and only that), so they are never stuck with an
+  order they cannot stop.
+- **A lesson worth putting in the write-up:** PostgREST answers an UPDATE that
+  RLS filtered out with **HTTP 200 and `error: null`** — zero rows changed, no
+  error raised. That is how customer cancellation silently did nothing until it
+  was caught in a live test. The fix is at both ends: a narrow policy that
+  *allows* the write, and a client that asks for the affected rows back and
+  treats "nothing changed" as a failure.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
 | Banner "running in local mode" | Check the two keys in `supabase-config.js`; check internet |
+| Console warning `promo_redemptions is missing` | Step 7 not run — one-time codes are enforced per browser only. Harmless; run `promo-schema.sql` to make them cross-device |
+| "The server accepted the request but changed nothing — your account is not allowed to update DD-xxxx" | Step 8 not run. A customer cancelled an order in cloud mode, but `orders` only granted UPDATE to admins, so RLS filtered the write out. Run `supabase/cancel-schema.sql` |
+| Customer's cancel button is missing entirely | Only `pending` orders can be cancelled by a customer. Once it is Confirmed the kitchen is committed, so the page offers "Need help? Contact us" instead and an admin must refuse it |
 | Setup page: "relation does not exist" | Step 1 not run (or run in the wrong project) |
 | Login: "profile row is missing" | Step 1 trigger missing — re-run schema.sql |
 | "Only admins can change roles" on promote | An admin already exists; sign in as admin@dishdash.ng instead |

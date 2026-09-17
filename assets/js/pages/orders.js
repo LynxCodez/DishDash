@@ -8,8 +8,9 @@
   let activeTab = 'active';
 
   function orderRow(o) {
-    const active = o.status !== 'delivered';
-    return '<div class="order-row" data-reveal>'
+    const active = !UI.isTerminal(o.status);
+    const info = S.cancelInfo(o);
+    return '<div class="order-row' + (o.status === 'cancelled' ? ' is-cancelled' : '') + '" data-reveal>'
       + '<div class="or-top">'
       + '<span class="or-id">' + UI.esc(o.id) + '</span>'
       + '<span class="or-date">' + UI.ic('cal') + UI.fmtDate(o.placedAt) + '</span>'
@@ -24,11 +25,18 @@
           + UI.esc(it.name) + ' × ' + it.qty + '</span>';
       }).join('')
       + '</div>'
+      + (o.status === 'cancelled'
+        ? '<div class="cancel-note">' + UI.ic('x') + '<span><b>Cancelled</b><span>'
+          + UI.esc(info ? info.reason : 'Cancelled') + ' · ' + (info && info.by === 'admin' ? 'by DishDash support' : 'by you')
+          + (info && info.at ? ' · ' + UI.fmtDate(info.at) : '') + '</span></span></div>'
+        : '')
       + '<div class="or-foot">'
       + '<span class="or-total"><small>Total</small>' + D.naira(o.total) + '</span>'
-      + (active
-        ? '<a class="btn btn-primary btn-sm" href="tracking.html?id=' + encodeURIComponent(o.id) + '">' + UI.ic('truck') + 'Track order</a>'
-        : '<span class="badge badge-acc">' + UI.ic('check') + ' Delivered</span>')
+      + (o.status === 'cancelled'
+        ? '<span class="badge badge-danger">' + UI.ic('x') + ' Cancelled</span>'
+        : (o.status === 'delivered'
+          ? '<span class="badge badge-acc">' + UI.ic('check') + ' Delivered</span>'
+          : '<a class="btn btn-primary btn-sm" href="tracking.html?id=' + encodeURIComponent(o.id) + '">' + UI.ic('truck') + 'Track order</a>'))
       + '<button class="btn btn-outline btn-sm" data-details="' + UI.esc(o.id) + '">View details</button>'
       + '<button class="btn btn-ghost btn-sm" data-reorder="' + UI.esc(o.id) + '" aria-label="Order again">' + UI.ic('refresh') + 'Order again</button>'
       + '</div></div>';
@@ -52,18 +60,47 @@
       + (o.discount > 0 ? '<div class="kv"><b>Promo ' + (o.promoCode ? '(' + UI.esc(o.promoCode) + ')' : 'discount') + '</b><span>&minus;' + D.naira(o.discount) + '</span></div>' : '')
       + '<div class="kv"><b>Total</b><span style="font-weight:800">' + D.naira(o.total) + '</span></div>'
       + '</div></div>';
-    UI.openModal(html, {
+    const canCancel = !!S.canCancel(o, 'customer').ok;
+    const modal = UI.openModal(html, {
       title: 'Order ' + o.id,
       size: 'lg',
       foot: '<button class="btn btn-outline" data-print-receipt>' + UI.ic('receipt') + 'Print receipt</button>'
-        + (o.status !== 'delivered'
-          ? '<a class="btn btn-primary" href="tracking.html?id=' + encodeURIComponent(o.id) + '">' + UI.ic('truck') + 'Track this order</a>'
-          : '<button class="btn btn-primary" data-order-again="' + UI.esc(o.id) + '">' + UI.ic('refresh') + ' Order again</button>')
+        + (canCancel
+          ? '<button class="btn btn-danger" data-cancel-order>' + UI.ic('x') + ' Cancel order</button>'
+          : '')
+        + (UI.isTerminal(o.status)
+          ? '<button class="btn btn-primary" data-order-again="' + UI.esc(o.id) + '">' + UI.ic('refresh') + ' Order again</button>'
+          : '<a class="btn btn-primary" href="tracking.html?id=' + encodeURIComponent(o.id) + '">' + UI.ic('truck') + ' Track this order</a>')
     });
-    const again = document.querySelector('[data-order-again]');
+    const again = modal.querySelector('[data-order-again]');
     if (again) again.addEventListener('click', function () { reorder(o); });
-    const printBtn = document.querySelector('[data-print-receipt]');
+    const printBtn = modal.querySelector('[data-print-receipt]');
     if (printBtn) printBtn.addEventListener('click', function () { UI.printReceipt(o); });
+    const cancelBtn = modal.querySelector('[data-cancel-order]');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', function () {
+        UI.promptDialog({
+          title: 'Cancel order ' + o.id + '?',
+          msg: 'Nothing has been cooked yet, so this is free to stop.',
+          label: 'Why are you cancelling? (optional)',
+          placeholder: 'e.g. ordered by mistake',
+          danger: true,
+          okText: 'Yes, cancel order',
+          cancelText: 'Keep my order'
+        }).then(function (reason) {
+          if (reason === null) return;
+          Promise.resolve(S.cancelOrder(o.id, reason, 'customer')).then(function (res) {
+            if (res && res.ok) {
+              modal.close();
+              UI.toast('Order cancelled', o.id + ' was cancelled. Any promo code you used is available again.', 'success', 4600);
+              render();
+            } else {
+              UI.toast('Could not cancel', (res && res.error) || 'Please try again.', 'error', 4600);
+            }
+          });
+        });
+      });
+    }
   }
 
   function reorder(o) {
@@ -99,8 +136,9 @@
       return;
     }
 
-    const active = mine.filter(function (o) { return o.status !== 'delivered'; });
-    const past = mine.filter(function (o) { return o.status === 'delivered'; });
+    // cancelled orders are history, not active work — same rule as the store
+    const active = mine.filter(function (o) { return !UI.isTerminal(o.status); });
+    const past = mine.filter(function (o) { return UI.isTerminal(o.status); });
     const list = activeTab === 'active' ? active : past;
 
     view.innerHTML =

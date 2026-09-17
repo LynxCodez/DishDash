@@ -229,7 +229,9 @@
 
   function render() {
     if (!guard()) return;
-    const all = S.orders();
+    // cancelled orders never happened as sales — keep them out of every
+    // figure below (revenue, AOV, order counts, the peak-hours heatmap)
+    const all = S.orders().filter(function (o) { return o.status !== 'cancelled'; });
     const now = Date.now();
     const start = rangeStart(state.range, now);
     const prevStart = rangeStartPrevious(state.range, now);

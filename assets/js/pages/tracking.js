@@ -6,7 +6,17 @@
   const UI = window.DD_UI;
 
   function timelineHTML(order) {
-    const idx = S.statusIndex(order);
+    const cancelled = order.status === 'cancelled';
+    const info = S.cancelInfo(order);
+    /* A cancelled order has no current status on the happy path — read the
+       FURTHEST step it actually reached out of its history instead, so the
+       timeline freezes where fulfilment really stopped. */
+    const idx = cancelled
+      ? (order.statusHistory || []).reduce(function (far, h) {
+        const i = D.STATUS_FLOW.findIndex(function (s) { return s.key === h.status; });
+        return i > far ? i : far;
+      }, 0)
+      : S.statusIndex(order);
     const reached = {};
     (order.statusHistory || []).forEach(function (h) {
       if (!reached[h.status]) reached[h.status] = h.at;
@@ -14,10 +24,12 @@
     const etaMin = order.status === 'delivered' ? 0 : (order.etaMin || D.CONFIG.avgDeliveryMin);
     const etaAt = Date.parse(order.placedAt) + etaMin * 60000;
     const remaining = Math.round((etaAt - Date.now()) / 60000);
-    const showEta = order.status !== 'delivered' && remaining > 0;
+    const showEta = !cancelled && order.status !== 'delivered' && remaining > 0;
     return '<div class="timeline">' + D.STATUS_FLOW.map(function (st, i) {
-      const done = i < idx || (order.status === 'delivered' && i <= idx);
-      const isCurrent = i === idx && order.status !== 'delivered';
+      // cancelled: mark exactly what the order actually reached, not a
+      // position on a journey it never finished
+      const done = cancelled ? !!reached[st.key] : (i < idx || (order.status === 'delivered' && i <= idx));
+      const isCurrent = !cancelled && i === idx && order.status !== 'delivered';
       const at = reached[st.key];
       const icon = done ? 'check' : ((UI.STATUS_ICON || {})[st.key] || 'clock');
       const tClass = done ? ' done' : (isCurrent ? ' current' : ' todo');
@@ -36,7 +48,17 @@
         + (at ? '<span class="tl-time">' + UI.ic('clock') + UI.fmtDate(at) + '</span>' : '')
         + extra
         + '</div></div>';
-    }).join('') + '</div>';
+    }).join('')
+      + (cancelled
+        ? '<div class="tl-step cancelled" data-reveal>'
+          + '<span class="tl-dot">' + UI.ic('x') + '</span>'
+          + '<div class="tl-body"><div class="tl-title">' + UI.esc(D.CANCELLED.label) + '</div>'
+          + '<div class="tl-desc">' + UI.esc(info ? info.reason : D.CANCELLED.desc)
+          + (info ? ' — ' + (info.by === 'admin' ? 'cancelled by DishDash support' : 'cancelled by you') : '') + '</div>'
+          + (info && info.at ? '<span class="tl-time">' + UI.ic('clock') + UI.fmtDate(info.at) + '</span>' : '')
+          + '</div></div>'
+        : '')
+      + '</div>';
   }
 
   function render() {
@@ -64,6 +86,14 @@
       return;
     }
     const payLabel = UI.payMethodLabel(order.pay);
+    const info = S.cancelInfo(order);
+    const canCancel = !!S.canCancel(order, 'customer').ok;
+    const cancelNote = order.status === 'cancelled' && info
+      ? '<div class="cancel-note">' + UI.ic('x')
+        + '<span><b>This order was cancelled</b>'
+        + '<span>' + UI.esc(info.reason) + ' · ' + (info.by === 'admin' ? 'by DishDash support' : 'by you')
+        + (info.at ? ' · ' + UI.fmtDate(info.at) : '') + '</span></span></div>'
+      : '';
 
     view.innerHTML = '<div class="track-layout">'
       + '<div class="track-panel">'
@@ -72,10 +102,15 @@
       + UI.statusBadge(order.status)
       + '</div>'
       + timelineHTML(order)
+      + cancelNote
       + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:22px">'
       + '<a class="btn btn-outline" href="orders.html">' + UI.ic('arrow-l') + 'All orders</a>'
-      + (order.status !== 'delivered' ? '<button class="btn btn-ghost" data-support>Need help? Contact us</button>' : '<button class="btn btn-ghost" data-reorder>Order again</button>')
+      + (canCancel ? '<button class="btn btn-danger" data-cancel-order>' + UI.ic('x') + 'Cancel order</button>' : '')
+      + (UI.isTerminal(order.status)
+        ? '<button class="btn btn-ghost" data-reorder>' + UI.ic('refresh') + 'Order again</button>'
+        : '<button class="btn btn-ghost" data-support>Need help? Contact us</button>')
       + '</div>'
+      + (canCancel ? '<p class="promo-hint" style="margin-top:12px">' + UI.ic('info') + ' You can cancel free of charge while the order is still pending. Once the kitchen starts cooking it is final.</p>' : '')
       + '</div>'
 
       + '<aside class="track-side">'
@@ -107,6 +142,30 @@
     if (support) {
       support.addEventListener('click', function () {
         UI.toast('We\'re here to help', 'Call ' + D.CONFIG.supportPhone + ' or email ' + D.CONFIG.supportEmail + '.', 'info', 5000);
+      });
+    }
+    const cancelBtn = view.querySelector('[data-cancel-order]');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', function () {
+        UI.promptDialog({
+          title: 'Cancel order ' + order.id + '?',
+          msg: 'Nothing has been cooked yet, so this is free to stop.',
+          label: 'Why are you cancelling? (optional)',
+          placeholder: 'e.g. ordered by mistake',
+          danger: true,
+          okText: 'Yes, cancel order',
+          cancelText: 'Keep my order'
+        }).then(function (reason) {
+          if (reason === null) return;   // backed out
+          Promise.resolve(S.cancelOrder(order.id, reason, 'customer')).then(function (res) {
+            if (res && res.ok) {
+              UI.toast('Order cancelled', order.id + ' was cancelled. Any promo code you used is available again.', 'success', 4600);
+              render();
+            } else {
+              UI.toast('Could not cancel', (res && res.error) || 'Please try again.', 'error', 4600);
+            }
+          });
+        });
       });
     }
     const again = view.querySelector('[data-reorder]');

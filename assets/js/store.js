@@ -611,17 +611,69 @@ window.DD_STORE = (function () {
     return { ok: false, error: 'The email code needs Supabase (cloud mode) — in local mode use the in-app code.' };
   }
 
-  /* ---------------- promo codes ---------------- */
-  function validatePromo(code, sub) {
-    const key = String(code || '').trim().toUpperCase();
-    if (!key) return { ok: false, error: 'Enter a promo code to apply it.' };
-    const promo = D.PROMOS[key];
-    if (!promo) return { ok: false, error: 'That promo code isn\'t valid. Double-check and try again.' };
-    if (promo.minSub && sub < promo.minSub) {
-      return { ok: false, error: 'This code needs an order of at least ' + D.naira(promo.minSub) + ' before it applies.' };
+  /* ---------------- promo codes: one-time redemption ----------------
+     A `once` code is spendable exactly one time per ACCOUNT. Redemptions are
+     recorded here (and, in cloud mode, mirrored to a promo_redemptions row)
+     so the rule holds across reloads and browsers. A guest has no account to
+     key on, so it falls back to a single per-browser key — the best an
+     account-less demo can do.
+
+     Redeeming spends the code; CANCELLING the order hands it straight back,
+     so nobody loses a welcome code to an order that never happened. The
+     rules themselves live once in DD_DATA.checkPromo — these are the two
+     environment-specific predicates it asks for. */
+  /* Overridable so the cloud adapter can key redemptions on the REAL signed-in
+     account id. In cloud mode the local session is unused, so without this the
+     local record would be keyed 'guest' — and one account's redemption would
+     wrongly block the next account on a shared browser (exactly the demo
+     setup, where several accounts live in one browser). */
+  let promoOwnerOverride = null;
+  function setPromoOwner(fn) { promoOwnerOverride = fn; }
+  function promoOwner() {
+    if (typeof promoOwnerOverride === 'function') {
+      const o = promoOwnerOverride();
+      if (o) return String(o);
     }
-    const discount = Math.round(promo.type === 'percent' ? sub * promo.value / 100 : Math.min(promo.value, sub));
-    return { ok: true, code: key, promo: promo, discount: discount };
+    const u = currentUser();
+    return u && u.id ? String(u.id) : 'guest';
+  }
+  function promoUses() { return read('promoUses', null) || []; }   // [{code, owner, orderId, at}]
+  function savePromoUses(list) { write('promoUses', list); }
+  function promoUsedByMe(code) {
+    const owner = promoOwner();
+    const key = String(code || '').toUpperCase();
+    return promoUses().some(function (u) { return u.code === key && u.owner === owner; });
+  }
+  function myPromoUses() {
+    const owner = promoOwner();
+    return promoUses().filter(function (u) { return u.owner === owner; });
+  }
+  function redeemPromo(code, orderId) {
+    if (!code) return;
+    const list = promoUses();
+    list.push({ code: String(code).toUpperCase(), owner: promoOwner(), orderId: orderId || null, at: new Date().toISOString() });
+    savePromoUses(list);
+    broadcast('promos');
+  }
+  function releasePromo(code, orderId) {
+    if (!code) return;
+    const key = String(code).toUpperCase();
+    const owner = promoOwner();
+    const all = promoUses();
+    // no orderId → release every redemption of that code by this owner
+    const list = all.filter(function (u) {
+      if (u.code !== key || u.owner !== owner) return true;
+      return orderId ? String(u.orderId) !== String(orderId) : false;
+    });
+    if (list.length !== all.length) {
+      savePromoUses(list);
+      broadcast('promos');
+    }
+  }
+  function validatePromo(code, sub) {
+    return D.checkPromo(code, sub, promoUsedByMe, function () {
+      return myOrders().some(function (o) { return o.status !== 'cancelled'; });
+    });
   }
   function sortOrders(list) {
     return list.slice().sort(function (a, b) { return Date.parse(b.placedAt) - Date.parse(a.placedAt); });
@@ -685,6 +737,7 @@ window.DD_STORE = (function () {
     clearCart();
     // remember delivery details for next checkout
     if (u) updateUser(u.id, { delivery: order.customer });
+    redeemPromo(order.promoCode, order.id);   // spend a one-time code ONLY now
     broadcast('orders');
     return order;
   }
@@ -739,12 +792,54 @@ window.DD_STORE = (function () {
     const list = orders();
     const o = list.find(function (x) { return x.id === orderId; });
     if (!o) return null;
-    if (o.status === 'delivered') return o;
+    // terminal states are final — no advancing a delivered or cancelled order
+    if (o.status === 'delivered' || o.status === 'cancelled') return o;
     o.status = statusKey;
     o.statusHistory.push({ status: statusKey, at: new Date().toISOString() });
     saveOrders(list);
     broadcast('orders');
     return o;
+  }
+
+  /* ---------------- order cancellation --------------
+     A customer may cancel while the order is still 'pending' (nothing has
+     been cooked and no rider is out, so it is still free to stop). An admin
+     may cancel at any point before delivery — a refusal — for a real reason.
+
+     The reason and the actor ride inside statusHistory, which is ALREADY a
+     jsonb column mapped in both directions, so cancellation needs no schema
+     change: orderToDb/orderFromDb carry it for free. cancelInfo() is the
+     read-side that every page uses to display it. */
+  function canCancel(order, by) {
+    if (!order) return { ok: false, error: 'Order not found.' };
+    if (order.status === 'cancelled') return { ok: false, error: 'This order was already cancelled.' };
+    if (order.status === 'delivered') return { ok: false, error: 'This order was already delivered — it can no longer be cancelled.' };
+    if (by === 'customer' && order.status !== 'pending') {
+      return { ok: false, error: 'This order is already being prepared. Contact support if you need to change it.' };
+    }
+    return { ok: true };
+  }
+  function cancelOrder(orderId, reason, by) {
+    const list = orders();
+    const o = list.find(function (x) { return x.id === orderId; });
+    const gate = canCancel(o, by || 'customer');
+    if (!gate.ok) return gate;
+    o.status = 'cancelled';
+    o.statusHistory.push({
+      status: 'cancelled', at: new Date().toISOString(),
+      by: by || 'customer', reason: String(reason || '').trim() || 'No reason given'
+    });
+    saveOrders(list);
+    releasePromo(o.promoCode, o.id);   // the code only counts once the order stands
+    broadcast('orders');
+    return { ok: true, order: o };
+  }
+  function cancelInfo(order) {
+    if (!order) return null;
+    const hist = (order.statusHistory || []).filter(function (h) { return h.status === 'cancelled'; });
+    const last = hist[hist.length - 1];
+    if (!last) return order.status === 'cancelled' ? { by: 'customer', reason: 'No reason given', at: null } : null;
+    return { by: last.by || 'customer', reason: last.reason || 'No reason given', at: last.at || null };
   }
 
   /* ---------------- admin catalog CRUD ---------------- */
@@ -889,9 +984,10 @@ window.DD_STORE = (function () {
     getFavs, isFav, toggleFav,
     // orders
     orders, sortOrders, getOrder, myOrders, placeOrder, updateOrderStatus, nextStatus, statusIndex,
+    canCancel, cancelOrder, cancelInfo,
     verifyTransfer, confirmPayment,
     // promo
-    validatePromo,
+    validatePromo, promoUsedByMe, myPromoUses, redeemPromo, releasePromo, setPromoOwner,
     // phone
     normalizePhone, validatePhone, isNgMobile, canonicalPhone,
     // bank-account verification (item 3)
@@ -1091,6 +1187,7 @@ window.DD_STORE_SYNC = (function () {
       await detectPayAccountColumn(state.client);
       await pullCatalog();
       await bridgeAuth();
+      pullPromoUses().catch(function () {});
       subscribeRealtime();
       state.ready = true;
     } catch (e) {
@@ -1612,6 +1709,70 @@ window.DD_STORE_SYNC = (function () {
     return orders;
   }
 
+  /* ---------------- promo redemptions (one-time codes) ----------------
+     A `once` code must be spendable one time per ACCOUNT — across browsers,
+     not just this one — so the record has to live in the database. Rows are
+     RLS-scoped to their owner.
+
+     The migration is OPTIONAL BY DESIGN, exactly like the paying-account
+     column above: a project that has not run supabase/promo-schema.sql must
+     still boot and must still let people order. Until the table exists the
+     app degrades to this browser's own records (still one-time locally, just
+     not across devices) instead of failing a customer's checkout. */
+  let promoTableMissing = false;
+  function isMissingTable(error) {
+    const code = String((error && error.code) || '');
+    return code === '42P01' || code === 'PGRST205'
+      || /does not exist|could not find the table|schema cache/i.test(String((error && error.message) || ''));
+  }
+  async function pullPromoUses() {
+    if (promoTableMissing) return [];
+    // only this account's rows are meaningful to the checker, so filter to
+    // them even when an admin's broader read policy returns everyone's
+    const u = await currentUser();
+    const { data, error } = await state.client.from('promo_redemptions')
+      .select('user_id, code, order_id, created_at');
+    if (error) {
+      if (isMissingTable(error) && !promoTableMissing) {
+        promoTableMissing = true;
+        console.warn('[store] promo_redemptions is missing — one-time codes fall back to this browser. Run supabase/promo-schema.sql.');
+      }
+      return [];
+    }
+    const mine = (data || []).filter(function (r) { return !u || String(r.user_id) === String(u.id); });
+    shadowWrite('promoUses', mine.map(function (r) {
+      return { code: r.code, owner: r.user_id, orderId: r.order_id, at: r.created_at };
+    }));
+    S.broadcast('promos');
+    return mine;
+  }
+  async function redeemPromoRow(code, orderId) {
+    if (promoTableMissing || !code) return;
+    const u = await currentUser();
+    if (!u) return;   // a guest has no account to key on — local record only
+    const { error } = await state.client.from('promo_redemptions').upsert(
+      { user_id: u.id, code: String(code).toUpperCase(), order_id: orderId || null },
+      { onConflict: 'user_id,code' }
+    );
+    if (error) {
+      if (isMissingTable(error)) promoTableMissing = true;
+      return;
+    }
+    await pullPromoUses();
+  }
+  async function releasePromoRow(code, orderId) {
+    if (promoTableMissing || !code) return;
+    if (!state.client) return;
+    let q = state.client.from('promo_redemptions').delete().eq('code', String(code).toUpperCase());
+    if (orderId) q = q.eq('order_id', orderId);
+    const { error } = await q;
+    if (error) {
+      if (isMissingTable(error)) promoTableMissing = true;
+      return;
+    }
+    await pullPromoUses();
+  }
+
   /* The verified paying-account snapshot (item 3) is stored in a pay_account
      column. A project created before that migration lacks it, and Postgres
      would reject the WHOLE order — so an un-run migration must never be able
@@ -1668,12 +1829,21 @@ window.DD_STORE_SYNC = (function () {
 
   async function updateOrder(order) {
     const c = state.client;
-    let attempt = await c.from('orders').update(withoutPayAccount(orderToDb(order))).eq('id', order.id);
+    const row = withoutPayAccount(orderToDb(order));
+    // .select('id') asks PostgREST for the rows it actually changed. This is
+    // NOT decoration: an UPDATE that is filtered out by RLS matches zero rows
+    // and still answers 200 with error:null — which is how a missing policy
+    // becomes a silent lie (the UI says "cancelled", the database disagrees).
+    let attempt = await c.from('orders').update(row).eq('id', order.id).select('id');
     if (isMissingPayAccountCol(attempt.error)) {
       payAccountColumn = false;
-      attempt = await c.from('orders').update(withoutPayAccount(orderToDb(order))).eq('id', order.id);
+      attempt = await c.from('orders').update(withoutPayAccount(orderToDb(order))).eq('id', order.id).select('id');
     }
     if (attempt.error) throw attempt.error;
+    if (!attempt.data || !attempt.data.length) {
+      throw new Error('The server accepted the request but changed nothing — your account is not allowed to update ' + order.id
+        + '. (Admin: run supabase/cancel-schema.sql to grant customers cancellation.)');
+    }
     await pullOrders();
   }
 
@@ -1769,13 +1939,12 @@ window.DD_STORE_SYNC = (function () {
     const c = state.client;
     const { error } = await c.from('profiles').update({ role: 'admin' }).eq('email', String(email || '').toLowerCase());
     return error ? { ok: false, error: error.message } : { ok: true };
-  }
-
-  return {
-    init, status, configPresent,
-    markAuthReady, whenAuthReady,
-    registerUser, login, logout, currentUser, updateProfile,
-    pullOrders, pullCatalog, pullUsers, placeOrder, updateOrder,
+  }    return {
+      init, status, configPresent,
+      markAuthReady, whenAuthReady,
+      registerUser, login, logout, currentUser, updateProfile,
+      pullOrders, pullCatalog, pullUsers, placeOrder, updateOrder,
+      pullPromoUses, redeemPromoRow, releasePromoRow,
     pullReviews, addReviewCloud, updateReviewCloud, deleteReviewCloud, feedbackSubmitCloud,
     requestEmailCode, confirmEmailCode, markEmailVerified, resendConfirmationEmail, confirmSignupOtp, lastDemoCode,
     setVerificationMode, verificationMode,
@@ -1889,6 +2058,9 @@ window.DD_CLOUD = (function () {
   async function refreshSession() {
     sessionCache = await Y.currentUser();
     hintWrite(sessionCache);
+    // redemption records belong to the ACCOUNT, so they must be scoped to the
+    // session that is being restored, not left over from the previous one
+    await Y.pullPromoUses().catch(function () {});
     if (sessionCache) favsCache = await Y.getFavIds().catch(function () { return []; });
     else favsCache = [];
     // re-scope the order cache to the new session — otherwise a customer who
@@ -1980,6 +2152,87 @@ window.DD_CLOUD = (function () {
     S.logout = function () { sessionCache = null; favsCache = []; hintWrite(null); return Y.logout(); };
     S.updateUser = function (id, patch) { return Y.updateProfile(id, patch).then(function (res) { if (res.ok) return refreshSession().then(function () { return res.user; }); throw new Error(res.error); }); };
 
+    /* ---------- promo redemption (one-time codes) ----------
+       The durable, cross-device record is a promo_redemptions row. This
+       browser keeps its own copy too and it is keyed by the REAL account id
+       (via setPromoOwner), so a project that never ran the migration still
+       enforces "one time" per account locally, and several accounts sharing
+       one browser never contaminate each other. */
+    S.setPromoOwner(function () { return sessionCache ? sessionCache.id : null; });
+    const localUsed = S.promoUsedByMe;
+    const localRedeem = S.redeemPromo;
+    const localRelease = S.releasePromo;
+    const localMine = S.myPromoUses;
+    S.promoUsedByMe = function (code) {
+      const key = String(code || '').toUpperCase();
+      if (localUsed(key)) return true;
+      return Y._shadow.read('promoUses', []).some(function (r) { return String(r.code).toUpperCase() === key; });
+    };
+    /* Same shape as the local one (an array) so callers need no mode check. */
+    S.myPromoUses = function () {
+      const out = [], seen = {};
+      localMine().concat(Y._shadow.read('promoUses', [])).forEach(function (r) {
+        if (!r || !r.code) return;
+        const k = String(r.code).toUpperCase();
+        if (seen[k]) return;
+        seen[k] = true;
+        out.push({ code: k, orderId: r.orderId || null, at: r.at || null });
+      });
+      return out;
+    };
+    S.validatePromo = function (code, sub) {
+      return window.DD_DATA.checkPromo(code, sub, S.promoUsedByMe, function () {
+        const u = sessionCache;
+        if (!u) return false;
+        return S.orders().some(function (o) {
+          return String(o.userId) === String(u.id) && o.status !== 'cancelled';
+        });
+      });
+    };
+    S.redeemPromo = function (code, orderId) {
+      if (!code) return;
+      localRedeem(code, orderId);                       // this browser, per account
+      Y.redeemPromoRow(code, orderId).catch(function () {});   // durable, cross-device
+    };
+    S.releasePromo = function (code, orderId) {
+      if (!code) return;
+      localRelease(code, orderId);
+      Y.releasePromoRow(code, orderId).catch(function () {});
+    };
+
+    /* ---------- cancellation (terminal, off-flow state) ---------- */
+    S.cancelOrder = function (orderId, reason, by) {
+      const o = S.getOrder(orderId);
+      // canCancel() is pure field inspection — the local rules apply verbatim
+      const gate = S.canCancel(o, by || 'customer');
+      if (!gate.ok) return Promise.resolve(gate);
+      o.status = 'cancelled';
+      o.statusHistory.push({
+        status: 'cancelled', at: new Date().toISOString(),
+        by: by || 'customer', reason: String(reason || '').trim() || 'No reason given'
+      });
+      return Y.updateOrder(o).then(function () {
+        S.releasePromo(o.promoCode, o.id);
+        S.broadcast('orders');
+        return { ok: true, order: o };
+      }).catch(function (err) {
+        // The write did not land, so the optimistic change above is a lie:
+        // drop it, re-render from the untouched cache, and report the failure
+        // instead of toasting a cancellation that never happened.
+        S.broadcast('orders');
+        return { ok: false, error: (err && err.message) || 'Could not cancel this order. Please try again.' };
+      });
+    };
+
+    /* Cloud orders are RLS-scoped, but the local myOrders() keys off the LOCAL
+       session — which cloud mode never writes, so it would always answer []
+       here. Resolve the owner from the cloud session instead. */
+    S.myOrders = function () {
+      const u = sessionCache;
+      if (!u) return [];
+      return S.sortOrders(S.orders().filter(function (o) { return String(o.userId) === String(u.id); }));
+    };
+
     /* ---------- favorites (optimistic) ---------- */
     S.getFavs = function () { return favsCache.map(function (id) { return S.foods().find(function (f) { return f.id === id; }); }).filter(Boolean); };
     S.isFav = function (id) { return favsCache.indexOf(Number(id)) !== -1; };
@@ -2023,15 +2276,26 @@ window.DD_CLOUD = (function () {
         statusHistory: [{ status: 'pending', at: now.toISOString() }],
         placedAt: now.toISOString(), etaMin: D.CONFIG.avgDeliveryMin, source: 'app'
       };
-      return Y.placeOrder(order).then(function (o) { S.clearCart(); S.broadcast('orders'); return o; });
+      return Y.placeOrder(order).then(function (o) {
+        S.clearCart();
+        S.redeemPromo(o.promoCode, o.id);   // spend a one-time code ONLY now
+        S.broadcast('orders');
+        return o;
+      });
     };
     S.updateOrderStatus = function (orderId, statusKey) {
       const o = S.getOrder(orderId);
       if (!o) return Promise.resolve(null);
-      if (o.status === 'delivered') return Promise.resolve(o);
+      // terminal states are final — no advancing a delivered or cancelled order
+      if (o.status === 'delivered' || o.status === 'cancelled') return Promise.resolve(o);
       o.status = statusKey;
       o.statusHistory.push({ status: statusKey, at: new Date().toISOString() });
-      return Y.updateOrder(o).then(function () { S.broadcast('orders'); return o; });
+      return Y.updateOrder(o).then(function () { S.broadcast('orders'); return o; })
+        .catch(function (err) {
+          // never let the caller toast "advanced" for a write that did not land
+          S.broadcast('orders');
+          throw err;
+        });
     };
     S.verifyTransfer = function (orderId) {
       const o = S.getOrder(orderId);
@@ -2039,7 +2303,8 @@ window.DD_CLOUD = (function () {
       if (o.pay !== 'bank_transfer' && o.pay !== 'transfer') return Promise.resolve({ ok: false, error: 'Only bank-transfer orders can be verified.' });
       if ((o.payStatus || 'awaiting_verification') !== 'awaiting_verification') return Promise.resolve({ ok: false, error: 'This transfer is not awaiting verification.' });
       o.payStatus = 'paid'; o.verifiedAt = new Date().toISOString();
-      return Y.updateOrder(o).then(function () { S.broadcast('orders'); return { ok: true, order: o }; });
+      return Y.updateOrder(o).then(function () { S.broadcast('orders'); return { ok: true, order: o }; })
+        .catch(function (err) { S.broadcast('orders'); return { ok: false, error: (err && err.message) || 'Could not verify this transfer.' }; });
     };
     S.confirmPayment = function (orderId) {
       const o = S.getOrder(orderId);
@@ -2047,7 +2312,8 @@ window.DD_CLOUD = (function () {
       if (o.pay !== 'cod') return Promise.resolve({ ok: false, error: 'Only cash-on-delivery orders need payment confirmation.' });
       if ((o.payStatus || 'pending') !== 'pending') return Promise.resolve({ ok: false, error: 'This payment is not pending.' });
       o.payStatus = 'paid'; o.paidAt = new Date().toISOString();
-      return Y.updateOrder(o).then(function () { S.broadcast('orders'); return { ok: true, order: o }; });
+      return Y.updateOrder(o).then(function () { S.broadcast('orders'); return { ok: true, order: o }; })
+        .catch(function (err) { S.broadcast('orders'); return { ok: false, error: (err && err.message) || 'Could not confirm this payment.' }; });
     };
     S.addFood = function (data) {
       // foods.id is a plain int primary key (no identity/default in Postgres),

@@ -7,6 +7,17 @@
 
   const state = { q: '', tab: 'all' };
 
+  /* Tab keys = the happy-path flow plus the off-flow terminal state, which is
+     NOT part of DD_DATA.STATUS_FLOW (see the note by CANCELLED in data.js). */
+  const TAB_KEYS = ['all']
+    .concat(D.STATUS_FLOW.map(function (s) { return s.key; }))
+    .concat([D.CANCELLED.key]);
+  function tabLabel(t) {
+    if (t === 'all') return 'All orders';
+    const m = D.statusMeta(t);
+    return m ? m.label : t;
+  }
+
   function guard() {
     if (!S.requireAdmin()) { UI.go('../login.html?next=admin/orders.html'); return false; }
     return true;
@@ -29,7 +40,8 @@
       + '</div></td>'
       + '<td style="text-align:right"><div class="row-actions">'
       + '<button class="icon-act view" data-view="' + esc(o.id) + '" aria-label="View order ' + esc(o.id) + '">' + UI.ic('eye') + '</button>'
-      + (o.status !== 'delivered' ? '<button class="icon-act" data-next="' + esc(o.id) + '" aria-label="Advance ' + esc(o.id) + '" style="color:var(--brand-700);font-size:.8rem;font-weight:800;padding:0 6px">Next ▸</button>' : '')
+      + (UI.isTerminal(o.status) ? '' : '<button class="icon-act" data-next="' + esc(o.id) + '" aria-label="Advance ' + esc(o.id) + '" style="color:var(--brand-700);font-size:.8rem;font-weight:800;padding:0 6px">Next ▸</button>')
+      + (UI.isTerminal(o.status) ? '' : '<button class="icon-act" data-refuse="' + esc(o.id) + '" aria-label="Cancel order ' + esc(o.id) + '" style="color:var(--err)">' + UI.ic('x') + '</button>')
       + '</div></td>'
       + '</tr>';
   }
@@ -53,8 +65,8 @@
     const wrap = document.getElementById('ordersWrap');
     document.getElementById('orderCount').textContent = list.length + ' of ' + all.length + ' orders';
 
-    const tabs = ['all'].concat(D.STATUS_FLOW.map(function (s) { return s.key; })).map(function (t) {
-      const label = t === 'all' ? 'All orders' : (D.STATUS_FLOW.find(function (s) { return s.key === t; }) || {}).label;
+    const tabs = TAB_KEYS.map(function (t) {
+      const label = tabLabel(t);
       const n = t === 'all' ? all.length : (counts[t] || 0);
       const active = state.tab === t;
       return '<button class="atab' + (active ? ' active' : '') + '" data-tab="' + t + '" aria-pressed="' + active + '">' + esc(label) + ' <span class="n">' + n + '</span></button>';
@@ -65,7 +77,7 @@
         + '<div class="table-card">' + UI.emptyState({
           emoji: '🧾',
           title: 'No orders here',
-          msg: state.tab === 'all' ? 'Orders placed on the customer site will appear in this list.' : 'There are no ' + state.tab + ' orders right now.',
+          msg: state.tab === 'all' ? 'Orders placed on the customer site will appear in this list.' : 'There are no ' + tabLabel(state.tab).toLowerCase() + ' orders right now.',
           action: { href: 'orders.html', label: 'Show all orders' }
         }) + '</div>';
     } else {
@@ -87,6 +99,9 @@
     });
     wrap.querySelectorAll('[data-next]').forEach(function (b) {
       b.addEventListener('click', function () { advance(S.getOrder(b.getAttribute('data-next'))); });
+    });
+    wrap.querySelectorAll('[data-refuse]').forEach(function (b) {
+      b.addEventListener('click', function () { refuse(S.getOrder(b.getAttribute('data-refuse'))); });
     });
   }
 
@@ -139,10 +154,17 @@
       + '<div class="kv"><b>Placed</b><span>' + UI.fmtDate(o.placedAt) + '</span></div>'
       + '<h4 style="margin-top:16px">' + UI.ic('clock') + ' Status timeline</h4>'
       + '<div class="detail-items">' + history.map(function (h) {
-        return '<div class="di-row" style="border:0;padding:5px 0"><span class="di-name" style="font-weight:750">' + UI.statusLabel(h.status) + '</span><span class="di-qty" style="margin-left:auto;color:var(--muted);font-size:.8rem">' + UI.fmtDate(h.at) + '</span></div>';
+        const who = h.status === 'cancelled'
+          ? '<em class="di-note">' + esc(h.reason || 'No reason given') + ' · ' + (h.by === 'admin' ? 'DishDash support' : 'customer') + '</em>'
+          : '';
+        return '<div class="di-row" style="border:0;padding:5px 0"><span class="di-name" style="font-weight:750">' + UI.statusLabel(h.status) + who + '</span><span class="di-qty" style="margin-left:auto;color:var(--muted);font-size:.8rem">' + UI.fmtDate(h.at) + '</span></div>';
       }).join('') + '</div>'
       + '</div></div>';
 
+    const canCancel = !!S.canCancel(o, 'admin').ok;
+    const terminalBadge = o.status === 'cancelled'
+      ? '<span class="badge badge-danger" style="font-size:.88rem">' + UI.ic('x') + ' Cancelled</span>'
+      : '<span class="badge badge-acc" style="font-size:.88rem">' + UI.ic('check') + ' Order complete</span>';
     const foot = '<button class="btn btn-ghost" data-cancel>Close</button>'
       + (canVerify
         ? '<button class="btn btn-primary" data-verify>' + UI.ic('shield') + ' Verify Payment</button>'
@@ -150,9 +172,12 @@
       + (canConfirmCod
         ? '<button class="btn btn-primary" data-confirm-pay>' + UI.ic('check') + ' Confirm payment</button>'
         : '')
+      + (canCancel
+        ? '<button class="btn btn-danger" data-refuse>' + UI.ic('x') + ' Cancel order</button>'
+        : '')
       + (next
         ? '<button class="btn btn-primary" data-adv>' + UI.ic('arrow-r') + ' Advance to ' + esc((D.STATUS_FLOW.find(function (s) { return s.key === next; }) || {}).label) + '</button>'
-        : '<span class="badge badge-acc" style="font-size:.88rem">' + UI.ic('check') + ' Order complete</span>');
+        : terminalBadge);
 
     const modal = UI.openModal(html, { title: 'Order ' + o.id, size: 'lg', foot: foot });
     modal.querySelector('[data-cancel]').addEventListener('click', function () { modal.close(); });
@@ -199,6 +224,13 @@
         });
       });
     }
+    const rf = modal.querySelector('[data-refuse]');
+    if (rf) {
+      rf.addEventListener('click', function () {
+        modal.close();
+        refuse(o);
+      });
+    }
     const adv = modal.querySelector('[data-adv]');
     if (adv) {
       adv.addEventListener('click', function () {
@@ -220,8 +252,41 @@
     }
   }
 
+  /* Admin-side cancellation — a refusal. Allowed at any point before delivery
+     (a customer can only stop their own order while it is still pending), and
+     the reason is recorded on the order so the customer sees WHY in their
+     tracking view rather than a silent disappearance. */
+  function refuse(o) {
+    if (!o) { UI.toast('Order not found', 'That order no longer exists — the list has been refreshed.', 'error'); render(); return; }
+    const gate = S.canCancel(o, 'admin');
+    if (!gate.ok) { UI.toast('Cannot cancel', gate.error, 'error'); return; }
+    const isLive = o.status !== 'pending';
+    UI.promptDialog({
+      title: 'Cancel order ' + o.id + '?',
+      msg: isLive
+        ? 'This order is already ' + UI.statusLabel(o.status).toLowerCase() + '. Cancelling it stops fulfilment, and the customer will see your reason in their tracking view.'
+        : 'The customer will see your reason in their tracking view.',
+      label: 'Reason (shown to the customer)',
+      placeholder: 'e.g. item out of stock, address outside our delivery zone',
+      danger: true,
+      okText: 'Yes, cancel order',
+      cancelText: 'Keep order'
+    }).then(function (reason) {
+      if (reason === null) return;
+      Promise.resolve(S.cancelOrder(o.id, reason, 'admin')).then(function (res) {
+        if (res && res.ok) {
+          UI.toast('Order cancelled', o.id + ' was cancelled and the customer notified.', 'success', 4200);
+          render();
+        } else {
+          UI.toast('Could not cancel', (res && res.error) || 'Please try again.', 'error', 4200);
+        }
+      });
+    });
+  }
+
   function advance(o) {
     if (!o) { UI.toast('Order not found', 'That order no longer exists — the list has been refreshed.', 'error'); render(); return; }
+    if (UI.isTerminal(o.status)) { UI.toast('Order is closed', UI.statusLabel(o.status) + ' orders cannot be advanced.', 'info'); return; }
     const next = S.nextStatus(o);
     if (!next) return;
     const nextLabel = (D.STATUS_FLOW.find(function (s) { return s.key === next; }) || {}).label;

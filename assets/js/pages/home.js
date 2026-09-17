@@ -9,6 +9,61 @@
   // second rotation interval on top of the first.
   let heroTimer = null;
 
+  /* ---------------- hero variant (cinematic / classic) ----------------
+     Purely presentational, so the choice is remembered per browser with the
+     OS dark-mode setting as the default when nothing has been chosen yet.
+     Applied FIRST, before init(), and never on a timer: this script sits at
+     the end of <body> after the hero markup, so the class lands before the
+     first paint and a dark-OS visitor never sees a cream flash. */
+  const HERO_KEY = 'dishdash_hero_variant';
+  function heroStored() {
+    try { return localStorage.getItem(HERO_KEY); } catch (e) { return null; }
+  }
+  function heroVariant() {
+    const s = heroStored();
+    if (s === 'cinematic' || s === 'classic') return s;
+    try {
+      return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'cinematic' : 'classic';
+    } catch (e) { return 'classic'; }
+  }
+  function applyHeroVariant(v) {
+    const hero = document.querySelector('.hero');
+    if (!hero) return;
+    const cinematic = v === 'cinematic';
+    hero.classList.toggle('is-cinematic', cinematic);
+    const btn = hero.querySelector('[data-hero-variant]');
+    if (!btn) return;
+    btn.setAttribute('aria-pressed', cinematic ? 'true' : 'false');
+    btn.setAttribute('aria-label', cinematic
+      ? 'Hero lighting: dark cinematic. Switch to the bright classic hero.'
+      : 'Hero lighting: bright classic. Switch to the dark cinematic hero.');
+    btn.setAttribute('title', btn.getAttribute('aria-label'));
+    const label = btn.querySelector('[data-hv-label]');
+    if (label) label.textContent = cinematic ? 'Classic' : 'Cinematic';
+    // showing the icon for the look you are NOT in, so the button reads as
+    // "switch to…" rather than a status indicator
+    const use = btn.querySelector('use');
+    if (use) use.setAttribute('href', cinematic ? '#i-sun' : '#i-moon');
+  }
+  function wireHeroVariant() {
+    const btn = document.querySelector('[data-hero-variant]');
+    if (!btn || btn._wired) return;
+    btn._wired = true;
+    btn.addEventListener('click', function () {
+      // Flip the look that is ACTUALLY showing, not the stored one. When no
+      // choice has been stored yet the visible state comes from the OS
+      // dark-mode preference, so deciding from heroStored() would make the
+      // first click a no-op that contradicts the button's own label.
+      const hero = document.querySelector('.hero');
+      const showing = hero && hero.classList.contains('is-cinematic') ? 'cinematic' : 'classic';
+      const next = showing === 'cinematic' ? 'classic' : 'cinematic';
+      try { localStorage.setItem(HERO_KEY, next); } catch (e) { /* private mode */ }
+      applyHeroVariant(next);
+    });
+  }
+  applyHeroVariant(heroVariant());
+  wireHeroVariant();
+
   function init() {
     // stats
     document.querySelectorAll('[data-dish-count]').forEach(function (n) { n.textContent = S.foods().length; });
@@ -45,7 +100,10 @@
         UI.go('menu.html' + (q ? '?q=' + encodeURIComponent(q) : ''));
       });
     }
-    // promo quick-fill chips on hero? none
+    // the hero variant may have been applied before this node existed in a
+    // cache edge case; re-asserting is idempotent and keeps the button honest
+    applyHeroVariant(heroVariant());
+    wireHeroVariant();
 
     UI.reveal(document);
     UI.cartUISync(false);

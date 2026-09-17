@@ -179,6 +179,18 @@ window.DD_DATA = (function () {
     { key: 'delivered',      label: 'Delivered',      desc: 'Delivered — enjoy your meal!' }
   ];
 
+  /* `cancelled` is deliberately NOT a member of STATUS_FLOW. The flow above is
+     the happy path: the tracking timeline renders one step per entry, the
+     admin "Next ▸" action walks it, and nextStatus() reads its length. Hanging
+     cancelled off the end would make "delivered → cancelled" a legal advance.
+     Cancellation is an off-flow terminal state, so it lives here and every
+     lookup goes through statusMeta(). */
+  const CANCELLED = { key: 'cancelled', label: 'Cancelled', desc: 'This order was cancelled.' };
+
+  function statusMeta(key) {
+    return STATUS_FLOW.find(function (s) { return s.key === key; }) || (key === 'cancelled' ? CANCELLED : null);
+  }
+
   // payment methods (simulation only — no real gateway)
   const PAY_METHODS = [
     { key: 'card',         label: 'Card payment',    sub: 'Visa · Mastercard · Verve (demo — no card needed)',   emoji: '💳' },
@@ -240,11 +252,47 @@ window.DD_DATA = (function () {
     supportEmail: 'hello@dishdash.ng'
   };
 
-  // promo codes (demo coupons — validation + discount math lives in store.js)
+  /* promo codes (demo coupons — validation + discount math lives in store.js)
+     once           → redeemable once per account (enforced in every mode)
+     firstOrderOnly → only usable before the account has a standing order
+     Redeeming a code spends it; cancelling the order that used it releases it
+     again, so a customer never loses a code to an order that never happened. */
   const PROMOS = {
-    DISHWELCOME: { label: 'Welcome offer', type: 'flat', value: 1500, minSub: 0, desc: '₦1,500 off any order' },
-    FAST10: { label: 'Fast 10', type: 'percent', value: 10, minSub: 5000, desc: '10% off orders over ₦5,000' }
+    DISHWELCOME: {
+      label: 'Welcome offer', type: 'flat', value: 1500, minSub: 0,
+      desc: '₦1,500 off any order',
+      once: true, firstOrderOnly: true, welcome: true
+    },
+    FAST10: {
+      label: 'Fast 10', type: 'percent', value: 10, minSub: 5000,
+      desc: '10% off orders over ₦5,000',
+      once: false
+    }
   };
+
+  /* The ONE implementation of the promo rules, called by BOTH stores (local
+     and cloud) so a code can never behave differently depending on backend.
+     The caller supplies the two environment-specific predicates:
+       isUsed(code) → has this account already redeemed that code?
+       hasOrders()  → does this account have an order that still stands?
+     Predictates only — all messaging and money math lives here, once. */
+  function checkPromo(code, sub, isUsed, hasOrders) {
+    const key = String(code || '').trim().toUpperCase();
+    if (!key) return { ok: false, error: 'Enter a promo code to apply it.' };
+    const promo = PROMOS[key];
+    if (!promo) return { ok: false, error: 'That promo code isn\u2019t valid. Double-check and try again.' };
+    if (promo.once && isUsed && isUsed(key)) {
+      return { ok: false, used: true, error: key + ' is a one-time code, and this account has already used it.' };
+    }
+    if (promo.firstOrderOnly && hasOrders && hasOrders()) {
+      return { ok: false, used: true, error: key + ' is a welcome code for a first order \u2014 this account has already placed one.' };
+    }
+    if (promo.minSub && sub < promo.minSub) {
+      return { ok: false, error: 'This code needs an order of at least ' + naira(promo.minSub) + ' before it applies.' };
+    }
+    const discount = Math.round(promo.type === 'percent' ? sub * promo.value / 100 : Math.min(promo.value, sub));
+    return { ok: true, code: key, promo: promo, discount: discount };
+  }
 
   function getCategory(id) { return CATEGORIES.find(function (c) { return c.id === id; }); }
   function getFood(id) { return FOODS.find(function (f) { return f.id === Number(id); }); }
@@ -257,6 +305,7 @@ window.DD_DATA = (function () {
 
   return {
     img, naira, CATEGORIES, FOODS, GALLERY, SEED_USERS, SEED_ORDERS, STATUS_FLOW,
+    CANCELLED, statusMeta, checkPromo,
     PROMOS, CONFIG, PAY_METHODS, PAY_STATUS, DEMO_BANK, NG_BANKS, getCategory, getFood, countByCat, foodsInCat
   };
 })();

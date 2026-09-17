@@ -116,8 +116,17 @@ supabase/
 ├── schema.sql                core tables (profiles, foods, orders, RLS triggers)
 ├── reviews-schema.sql        reviews + feedback + RLS + realtime
 ├── verification-schema.sql   email verification (codes, RPCs, guard trigger)
+├── pay-account-schema.sql    verified paying-account snapshot on orders
+├── promo-schema.sql          one-time promo redemption, per account
+├── cancel-schema.sql         RLS policy letting a customer cancel their own order
 └── (open setup-demo.html to seed everything from the browser)
 ```
+
+Every migration above is **optional and idempotent**: each one is detected at
+boot and skipped if absent, so running none of them still gives a working demo
+(local mode, per-browser enforcement) and running all of them gives the full
+cloud behaviour. `cancel-schema.sql` is the only one whose absence a *customer
+action* can notice — see its section in `SETUP-SUPABASE.md`.
 
 Layering rules:
 
@@ -338,6 +347,25 @@ flattens all transitions, so no motion runs for those users. If Unsplash is
 unreachable the slides are transparent and the hero degrades to the original
 cream look — the emoji fallbacks in the foreground collage are untouched.
 
+### Cinematic variant (the same hero, shot at night)
+
+A button in the bottom-left of the hero switches between the bright classic
+look above and a **dark cinematic** one: the photo dims toward a deep warm
+black, the headline flips to warm white, the search bar and proof chips turn
+to glass, and the bottom fade grows to 58% so the dark band still melts into
+the cream page instead of ending in a hard line. The crossfade also gains a
+slow Ken Burns push (15 s, `heroKenBurns`) on whichever slide is showing.
+
+- **It is a hero variant, not a theme.** Only `.hero` changes — no other page
+  or component is touched, so nothing else in the site can regress.
+- **Defaults:** the visitor's stored choice wins; with nothing stored it
+  follows `prefers-color-scheme: dark`. So the hero matches the machine.
+- **The toggle flips whatever is actually showing**, not the stored value —
+  otherwise the first click on a dark-OS machine (where the visible state came
+  from the OS, not from storage) would contradict its own label.
+- Applied before first paint (`home.js` runs at the end of `<body>`, after the
+  hero markup), so a dark-OS visitor never sees a cream flash.
+
 ## Dish management & images (admin)
 
 The add/edit dish form (`admin/foods.js`) takes a real photo instead of a
@@ -408,7 +436,9 @@ form is what actually lands in storage rather than whatever was typed.
 | — | Demo launcher & session hygiene | **Done** — isolated demo browser profiles, `?fresh=1` clean start, “Signed in as …” switch-account bar, role-aware landing, stale-session sweep |
 | 8 | Improved dish-adding flow incl. images/thumbnails | **Done** — drag-drop/click upload with client-side resize to a web thumbnail, data-URL stored in `foods.img` (both modes), `D.img()` passthrough for any URL, inline per-field errors, local quota guard; add/edit/delete verified end-to-end in cloud mode |
 | — | Homepage hero photo backdrop w/ crossfade + scroll fade | **Done** — 3 verified Unsplash photos crossfading 2.4s every 6.5s, cream tint for text contrast, bottom melt into page bg; reduced-motion safe; degrades to cream hero offline |
-| — | Order cancellation (customer while pending, admin refuse) | Not started |
+| — | Order cancellation (customer while pending, admin refuse) | **Done** — off-flow `cancelled` terminal status with a recorded reason + actor; customer button while pending, admin refuse at any point before delivery; cancelling releases any promo code the order had spent. Run `cancel-schema.sql` for cloud mode |
+| — | One-time promo codes | **Done** — `DISHWELCOME` is one use per account and first-order-only; `FAST10` stays repeatable; cancel the order and the code comes back. Run `promo-schema.sql` for cross-device enforcement |
+| — | Dark cinematic hero variant | **Done** — toggleable night-time treatment of the hero (glass chrome, Ken Burns crossfade, 58% melt), remembered per browser and following the OS dark-mode setting by default |
 | — | Bulk admin actions (advance many orders at once) | Not started |
 | — | Push-notification simulation on status change | Not started |
 | — | Admin analytics: revenue by method, AOV, peak-hours heatmap | **Done** — all three shipped with the Reports page (item 5) |
@@ -420,6 +450,59 @@ form is what actually lands in storage rather than whatever was typed.
 Administrators advance orders in the admin console; the customer’s tracking
 page updates live — across tabs in local mode, and across browsers/devices in
 cloud mode via Supabase realtime.
+
+### Cancellation
+
+`cancelled` is a **terminal, off-flow** state — deliberately *not* a member of
+`DD_DATA.STATUS_FLOW`. The flow array is the happy path: the tracking timeline
+renders one step per entry, the admin “Next ▸” action walks it, and
+`nextStatus()` reads its length. Hanging `cancelled` off the end would make
+“delivered → cancelled” a legal advance. Every lookup goes through
+`D.statusMeta(key)` and every “is this still open?” question through
+`UI.isTerminal(key)`, so one new terminal state can never be forgotten in a
+single page.
+
+- **A customer** may cancel while the order is still `pending` — nothing has
+  been cooked and no rider is out, so it is still free to stop.
+- **An admin** may cancel at any point before delivery (a refusal), and is
+  asked for a reason.
+- The **reason and the actor** are stored inside `statusHistory`
+  (`{status:'cancelled', by:'customer'|'admin', reason}`). That column is
+  already `jsonb` and already mapped both ways by `orderToDb`/`orderFromDb`, so
+  cancellation needed **no schema change** and the reason survives the round
+  trip through Postgres — verified live.
+- The customer sees a red banner and a red timeline step explaining *why*,
+  rather than their order silently disappearing. On the tracking timeline the
+  steps the order actually reached stay ticked and the rest stay untouched.
+- **A cancelled order is not a sale.** Both order lists, the dashboard revenue
+  and order counts, the reports page and its peak-hours heatmap all exclude it.
+  The dashboard surfaces the count separately so cancellations stay visible.
+- Cancelling **releases any promo code** the order had spent (see below).
+
+## Promo codes (one-time)
+
+Codes live in `DD_DATA.PROMOS` with two flags: `once` (one redemption per
+account) and `firstOrderOnly`. `DISHWELCOME` is ₦1,500 off, `once: true`,
+`firstOrderOnly: true`; `FAST10` is 10% over ₦5,000 and repeatable on purpose,
+so the difference is demonstrable side by side.
+
+The rules are implemented **once**, in `DD_DATA.checkPromo(code, sub, isUsed,
+hasOrders)` — messaging and money math together — and each store hands it the
+predicates for its own backend. That way a code can never behave differently
+online and offline.
+
+- **Redemption is recorded, not inferred.** A code is spent when the order is
+  actually placed — not when it is typed into the field — and cancelling the
+  order that spent it deletes the record, so nobody burns a welcome code on an
+  order that never happened.
+- **Cloud mode** stores the durable record in `promo_redemptions` (unique on
+  `user_id, code` — the constraint *is* the rule), so a code spent on a phone is
+  spent on the laptop. **Local mode** keeps the same record in localStorage.
+  Both are always written, keyed to the real account id via `setPromoOwner`, so
+  two accounts sharing one browser never contaminate each other (which matters
+  in the demo, where they do).
+- The checkout hint is honest: a code this account has already spent is shown
+  struck through with “already used on this account”.
 
 ## Security notes (demo)
 

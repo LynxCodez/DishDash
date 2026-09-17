@@ -93,7 +93,7 @@
           + '<input class="input" id="promoInput" placeholder="e.g. DISHWELCOME" autocomplete="off" autocapitalize="characters" spellcheck="false">'
           + '<button class="btn btn-outline" data-promo-apply type="button">Apply</button>'
           + '</div>'
-          + '<p class="promo-hint">Try <b>DISHWELCOME</b> for &nbsp;' + D.naira(1500) + ' off, or <b>FAST10</b> for 10% off orders over &nbsp;' + D.naira(5000) + '.</p>'
+          + promoHintHTML()
           + '</div>')
       + '</div>'
       + '<div style="margin-top:12px">'
@@ -105,6 +105,23 @@
       + '<button class="btn btn-primary btn-lg btn-block" data-goto-pay>' + UI.ic('wallet') + 'Continue to payment</button>'
       + '<p style="font-size:.8rem;color:var(--muted);margin-top:12px;text-align:center">Estimated delivery: <b>' + UI.etaClock(new Date().toISOString(), D.CONFIG.avgDeliveryMin) + '</b>. Demo checkout — no real charges.</p>'
       + '<a class="cont-shop" href="cart.html" style="justify-content:center;width:100%">' + UI.ic('arrow-l') + 'Back to cart</a>';
+  }
+
+  /* The hint must be honest about codes this account has already spent —
+     otherwise the demo looks broken when a one-time code is refused. */
+  function promoHintHTML() {
+    let used = [];
+    try { used = (S.myPromoUses ? S.myPromoUses() : []).map(function (r) { return String(r.code).toUpperCase(); }); }
+    catch (e) { used = []; }
+    function chip(code, text) {
+      if (used.indexOf(code) !== -1) {
+        return '<s>' + code + '</s> <span class="promo-used">already used on this account</span>';
+      }
+      return '<b>' + code + '</b> ' + text;
+    }
+    return '<p class="promo-hint">Try ' + chip('DISHWELCOME', 'for ' + D.naira(1500) + ' off your first order')
+      + ', or ' + chip('FAST10', 'for 10% off orders over ' + D.naira(5000))
+      + '. One-time codes work once per account — cancelling the order they were used on releases them again.</p>';
   }
 
   function applyPromo() {
@@ -122,6 +139,8 @@
       return;
     }
     promo = { code: res.code, discount: res.discount };
+    // NB: applying does NOT spend the code — that happens when the order is
+    // actually placed, so the hint above stays truthful until then
     renderSummary();
     UI.toast('Promo applied 🎉', res.code + ': ' + res.promo.desc + ' — &minus;' + D.naira(res.discount), 'success', 3800);
   }

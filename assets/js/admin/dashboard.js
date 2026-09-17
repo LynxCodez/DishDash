@@ -16,13 +16,19 @@
   }
 
   function stats() {
-    const orders = S.orders();
+    const raw = S.orders();
+    /* A cancelled order is not a sale. It must not inflate revenue, order
+       counts or the live list — the same rule the reports page and both
+       order lists apply. Cancellations are surfaced as their own number so
+       they stay visible instead of quietly vanishing. */
+    const orders = raw.filter(function (o) { return o.status !== 'cancelled'; });
     const users = S.users();
     const revenue = orders.reduce(function (s, o) { return s + o.total; }, 0);
     const customers = users.filter(function (u) { return u.role === 'customer'; });
     return {
       orders: orders, revenue: revenue, customers: customers,
       foods: S.foods().length,
+      cancelled: raw.length - orders.length,
       pending: orders.filter(function (o) { return o.status === 'pending'; }),
       live: orders.filter(function (o) { return o.status !== 'delivered'; })
     };
@@ -87,8 +93,11 @@
       { ic: 'wallet', cls: 'si-rev', label: 'Total revenue', val: D.naira(st.revenue), sub: weekRev > 0 ? '₦' + weekRev.toLocaleString() + ' in last 7 days' : 'Includes all orders (demo)' },
       { ic: 'receipt', cls: 'si-order', label: 'Total orders', val: String(st.orders.length), sub: weekCount + ' in last 7 days' },
       { ic: 'users', cls: 'si-user', label: 'Customers', val: String(users.length), sub: 'registered accounts' },
-      { ic: 'utensils', cls: 'si-food', label: 'Food items', val: String(st.foods), sub: 'on the live menu' }
-    ].map(function (c) {
+      { ic: 'utensils', cls: 'si-food', label: 'Food items', val: String(st.foods), sub: 'on the live menu' },
+      st.cancelled
+        ? { ic: 'x', cls: 'si-cancel', label: 'Cancelled', val: String(st.cancelled), sub: 'excluded from revenue' }
+        : null
+    ].filter(Boolean).map(function (c) {
       return '<div class="stat-card" data-reveal><span class="stat-ico ' + c.cls + '">' + UI.ic(c.ic) + '</span>'
         + '<div class="stat-body"><b>' + c.label + '</b><div class="val">' + c.val + '</div><div class="delta" style="color:var(--muted);font-weight:650">' + esc(c.sub) + '</div></div></div>';
     }).join('');
@@ -178,6 +187,18 @@
 
   window.addEventListener('storage', function (e) {
     if (e.key === 'dishdash_orders' || e.key === 'dishdash_session' || e.key.indexOf('dishdash_food') === 0) render();
+  });
+
+  /* Cloud-mode correctness: this page renders at DOMContentLoaded, which is
+     BEFORE the async cloud boot swaps the store's reads. So the first paint
+     used to show the LOCAL store's numbers (seed orders, seed dish count) and
+     nothing ever corrected them — the admin's headline figures were simply
+     wrong until they navigated away and back. Subscribing to the store's own
+     change topics fixes that at the source: the boot pull broadcasts, and the
+     one-tick replay in store.js guarantees at least one post-boot render for
+     listeners that registered late. */
+  ['orders', 'users', 'foods', 'categories'].forEach(function (topic) {
+    if (window.DD_STORE.on) window.DD_STORE.on(topic, render);
   });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', render);

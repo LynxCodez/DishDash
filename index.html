@@ -26,6 +26,12 @@
         <div class="hero-bg-tint"></div>
         <div class="hero-bg-fade"></div>
       </div>
+      <!-- Same hero, shot at night. home.js applies the visitor's remembered
+           choice (OS dark-mode is the default when nothing is stored). -->
+      <button class="hero-variant" type="button" data-hero-variant aria-pressed="false" title="Switch the hero lighting">
+        <svg class="ic" aria-hidden="true"><use href="#i-moon"></use></svg>
+        <span data-hv-label>Cinematic</span>
+      </button>
       <div class="container hero-inner">
         <div class="hero-copy" data-reveal>
           <span class="eyebrow">Good food. Fast delivery.</span>

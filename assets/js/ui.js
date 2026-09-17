@@ -84,6 +84,8 @@ window.DD_UI = (function () {
     + '<symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10.6 9-7.1 9 7.1V20a1.6 1.6 0 0 1-1.6 1.6H4.6A1.6 1.6 0 0 1 3 20Z"/><path d="M9.5 21.5v-6.4h5v6.4"/></symbol>'
     + '<symbol id="i-utensils" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2.5v6.4a1.9 1.9 0 0 0 1.9 1.9h.2V21.5M9.1 10.8V2.5"/><path d="M3.5 2.5c2.6 0 4.5 2 4.5 4.6M17.5 21.5V12a4.5 4.5 0 0 0-4.5-4.5c0 6 2.5 8.7 4.5 14Z" opacity=".85"/><path d="M17.5 3.2c0 4-1.5 6.8-4.5 8.8"/></symbol>'
     + '<symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="1.8"/><path d="m21 15.5-4.8-4.8a1.5 1.5 0 0 0-2.1 0L4.5 20.2"/></symbol>'
+    + '<symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.4A8.6 8.6 0 0 1 9.6 3.5a8.6 8.6 0 1 0 10.9 10.9Z"/></symbol>'
+    + '<symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.1"/><path d="M12 2.6v2.1M12 19.3v2.1M4.4 4.4l1.5 1.5M18.1 18.1l1.5 1.5M2.6 12h2.1M19.3 12h2.1M4.4 19.6l1.5-1.5M18.1 5.9l1.5-1.5"/></symbol>'
     + '<symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.8"/></symbol>'
     + '<symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.4"/><path d="M2.8 20a6.2 6.2 0 0 1 12.4 0"/><path d="M16 4.9a3.4 3.4 0 0 1 0 6.2M17.6 14.3a6.2 6.2 0 0 1 3.6 5.7"/></symbol>'
     + '<symbol id="i-receipt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.8v18.4l2-1.6 2 1.6 2-1.6 2 1.6 2-1.6 2 1.6V2.8l-2 1.6-2-1.6-2 1.6-2-1.6-2 1.6Z"/><path d="M8.5 8.5h7M8.5 12h7M8.5 15.5h4"/></symbol>'
@@ -211,15 +213,19 @@ window.DD_UI = (function () {
   /* ------------------------------------------------------------
      6. Status helpers
   ------------------------------------------------------------ */
-  const STATUS_ICON = { pending: 'clock', confirmed: 'check', preparing: 'flame', outfordelivery: 'truck', delivered: 'box' };
+  const STATUS_ICON = { pending: 'clock', confirmed: 'check', preparing: 'flame', outfordelivery: 'truck', delivered: 'box', cancelled: 'x' };
   function statusBadge(key) {
-    const s = D.STATUS_FLOW.find(function (x) { return x.key === key; }) || { key: key, label: key };
+    const s = D.statusMeta(key) || { key: key, label: key };
     return '<span class="st-badge st-' + s.key + '">' + ic(STATUS_ICON[s.key] || 'clock') + esc(s.label) + '</span>';
   }
   function statusLabel(key) {
-    const s = D.STATUS_FLOW.find(function (x) { return x.key === key; });
+    const s = D.statusMeta(key);
     return s ? s.label : key;
   }
+  /* True for an order that is over — either it arrived or it was called off.
+     Every "is this still active?" question goes through here so a new terminal
+     state can never be forgotten in one page. */
+  function isTerminal(key) { return key === 'delivered' || key === 'cancelled'; }
 
   /* payment status — deliberately separate from order status.
      payStatusOf also maps orders saved before the payment upgrade
@@ -411,6 +417,31 @@ window.DD_UI = (function () {
     return bg;
   }
   // replace esc key handler management: store close to remove listener
+  /* One-field dialog — the cancellation reason. Resolves with the trimmed
+     string (possibly '') or null when the user backs out. */
+  function promptDialog(opts) {
+    opts = opts || {};
+    return new Promise(function (resolve) {
+      const html = '<div class="modal-msg" style="text-align:left">'
+        + '<h3 style="font-size:1.15rem">' + esc(opts.title || '') + '</h3>'
+        + (opts.msg ? '<p style="margin-left:0">' + esc(opts.msg) + '</p>' : '')
+        + '<label class="prompt-label" for="pdInput">' + esc(opts.label || 'Reason (optional)') + '</label>'
+        + '<textarea class="input" id="pdInput" rows="3" maxlength="200" placeholder="' + esc(opts.placeholder || '') + '"></textarea>'
+        + '<p class="promo-hint" style="margin-top:8px">' + ic('info') + ' ' + esc(opts.hint || 'Optional — it is recorded on the order so the other side sees why.') + '</p>'
+        + '</div>';
+      const foot = '<button class="btn btn-ghost" data-pd-cancel>' + esc(opts.cancelText || 'Keep order') + '</button>'
+        + '<button class="btn ' + (opts.danger ? 'btn-danger' : 'btn-primary') + '" data-pd-ok>' + esc(opts.okText || 'Continue') + '</button>';
+      const modal = openModal(html, { title: opts.headTitle || 'Please confirm', foot: foot, static: true });
+      const field = modal.querySelector('#pdInput');
+      field.focus();
+      modal.querySelector('[data-pd-cancel]').addEventListener('click', function () { modal.close(); resolve(null); });
+      modal.querySelector('[data-pd-ok]').addEventListener('click', function () {
+        const v = String(field.value || '').trim();
+        modal.close(); resolve(v);
+      });
+    });
+  }
+
   function confirmDialog(opts) {
     return new Promise(function (resolve) {
       const icon = opts.icon || 'trash';
@@ -1200,10 +1231,10 @@ window.DD_UI = (function () {
     esc, ic, fmtN, initials, qs, getParam, go, debounce, catOf,
     fmtDate, fmtDateShort, fmtTime, timeAgo, etaClock,
     logoMark, logoHTML, rootPath,
-    imgCover, starRow, statusBadge, statusLabel, payBadge, payMethodLabel, payStatusOf,
+    imgCover, starRow, statusBadge, statusLabel, isTerminal, payBadge, payMethodLabel, payStatusOf,
     foodCardHTML, emptyState, loaderHTML,
     paginationHTML, bindPagination, reveal,
-    toast, openModal, confirmDialog,
+    toast, openModal, confirmDialog, promptDialog,
     cartUISync, refreshChrome, isPage, isAdminPage, currentNavPage,
     printReceipt,
     confirm: confirmDialog,

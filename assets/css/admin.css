@@ -46,6 +46,7 @@ body.admin-page .site-header,body.admin-page .site-footer{display:none}
 .si-order{background:var(--brand-50);color:var(--brand-600)}
 .si-user{background:#E8F3FC;color:var(--blue)}
 .si-food{background:var(--amber-bg);color:var(--amber)}
+.si-cancel{background:var(--err-bg);color:var(--err)}
 .si-pend{background:var(--violet-bg);color:var(--violet)}
 .stat-body b{display:block;font-size:.76rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:750}
 .stat-body .val{font-size:1.75rem;font-weight:800;letter-spacing:-.03em;line-height:1.25;font-variant-numeric:tabular-nums}

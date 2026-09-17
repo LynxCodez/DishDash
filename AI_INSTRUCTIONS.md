@@ -84,6 +84,32 @@ There is no `npm test`. The established verification pattern is:
      `install()` re-assigns `currentUser` when the cloud adapter mounts, so a
      stub applied earlier is silently overwritten. Real verify.js, real code
      path, no database writes.
+10. **When the preview webview stops compositing, it also stops telling the
+   truth.** `preview_screenshot` fails with "produced no frames", and
+   **computed-style reads can be wrong**: `background-clip` reported
+   `border-box` for a gradient-text rule *and* for a throwaway inline probe on
+   the same page, while `CSS.supports('background-clip','text')` was `true`.
+   So do not conclude "my CSS regressed" from one computed value — cross-check
+   against a control probe (a fresh element with the declaration inline) and
+   read only properties the freeze cannot fake (class names, geometry, text
+   content, the store). Structural assertions beat a screenshot you cannot get.
+11. **Proving an RLS-dependent mutation needs a real write — make it a
+   disposable one.** The rule is still "don't leave data behind", not
+   "never write": what caught the customer-cancellation bug was placing a
+   clearly-labelled test order, cancelling it, re-pulling it from Postgres, and
+   then deleting it with the admin's `admin deletes orders` policy. Record the
+   row counts BEFORE and AFTER (here 13 orders → 14 → back to 13) and state the
+   cleanup in the report. A stubbed client can never prove an RLS policy.
+   Related: the customer session in cloud mode is the only way to exercise the
+   customer-side order paths, and the seed credentials are in `data.js`
+   (`demo@dishdash.ng` / `demo1234`, `admin@dishdash.ng` / `admin123`).
+   Two more shapes worth knowing: a deleted credential/fixture can be recreated,
+   and a stale demo password will surface as an ordinary login failure.
+12. **`orders.status` has no CHECK constraint**, and the customer's order row is
+   written with `orderToDb`, so `status_history` (jsonb) carries every
+   cancellation reason and actor through Postgres untouched. Adding a column
+   for it would have been wasted work — check whether an existing jsonb column
+   already maps what you need before writing a migration.
 
 ## 3. Supabase: what the AI can and cannot do
 
@@ -311,6 +337,51 @@ curl-checked for HTTP 200 BEFORE being committed (a dead Unsplash ID just
 silently shows nothing). If all photos fail, the hero degrades to the plain
 cream gradient — by design, do not "fix" that with a placeholder photo.
 
+**Hero cinematic variant.** `.hero.is-cinematic` (section 9b in style.css) is a
+**hero-only** treatment — do not grow it into a site-wide theme; the rest of
+the site is a cream design system and the dark band works precisely because
+the 58% fade melts into it. `home.js` applies it BEFORE `init()` and never on
+a timer, because the script sits at the end of `<body>` after the hero markup
+and the class must land before first paint (otherwise a dark-OS visitor sees a
+cream flash). Default = stored choice, else `prefers-color-scheme: dark`. The
+toggle handler flips **what is currently showing**, never the stored value —
+deciding from storage makes the first click contradict the button's own label
+whenever the visible state came from the OS preference.
+
+**Terminal order states are off-flow.** `cancelled` is NOT in
+`DD_DATA.STATUS_FLOW` (that array is the happy path: the tracking timeline
+renders one step per entry, `nextStatus()` reads its length, and the admin
+"Next ▸" walks it — appending `cancelled` would make "delivered → cancelled"
+a legal advance). Use `D.statusMeta(key)` for any status lookup and
+`UI.isTerminal(key)` for "is this order closed?" — never a bare
+`status === 'delivered'` test, and never a `.find()` against STATUS_FLOW, or
+cancelled orders will silently fall out of a page. The cancellation reason and
+actor live inside `statusHistory` entries, which is ALREADY a mapped jsonb
+column, so cancellation needed no schema change — keep it that way.
+
+**A 0-row UPDATE is not an error in PostgREST.** An update that RLS filters
+out matches zero rows and still answers 200 with `error: null`. That is how a
+missing policy becomes a silent lie: customer cancellation appeared to work
+while the row stayed `pending`. `updateOrder` therefore ends with
+`.select('id')` and throws when nothing came back, and every caller of it
+(`cancelOrder`, `updateOrderStatus`, `verifyTransfer`, `confirmPayment`) has a
+catch that rolls the optimistic change back and reports the failure. Keep both
+halves: **always ask for the affected rows back after a write**, and never let
+a caller toast success for a write that returned none. The matching migration
+is `supabase/cancel-schema.sql` (a customer may flip their OWN `pending` order
+to `cancelled` and nothing else).
+
+**Promo rules live once, in `DD_DATA.checkPromo`.** Both stores call it with
+their own predicates (`isUsed`, `hasOrders`) so a code cannot behave
+differently online and offline. A code is spent when the ORDER IS PLACED, not
+when it is typed, and cancelling releases it. Redemption is keyed per account —
+`setPromoOwner` overrides the owner in cloud mode, because the local session is
+unused there and the record would otherwise be keyed `guest`, letting one
+account's redemption block the next account on a shared browser (which is
+exactly the demo setup). Cloud persistence is `supabase/promo-schema.sql` and
+is optional: a missing table is detected and the app degrades to the per-browser
+record instead of failing checkout.
+
 ## 5. Conventions
 
 - Vanilla JS, ES5-ish style, no modules, no transpile: each page's controller
@@ -385,12 +456,27 @@ screen; later pushes reuse the stored credential.
 - Admin **review/feedback moderation screen**: DB permits it, no UI.
 - Admin analytics: revenue by payment method, AOV, peak-hours heatmap —
   DONE (shipped with the Reports page).
-- Backlog from an external review, triaged & real (remaining): order
-  cancellation (customer while pending / admin refuse), bulk admin actions
-  (advance many orders), push-notification simulation on status change,
+- **Order cancellation**: DONE and verified live in cloud mode (2026-09-17) —
+  customer cancel while `pending`, admin refuse at any point before delivery,
+  reason + actor in `statusHistory`, terminal states final, cancelled orders
+  excluded from revenue/order counts/heatmap. See section 4 for the off-flow
+  status contract and the 0-row-UPDATE trap. **`cancel-schema.sql` must be run
+  for the customer path in cloud mode** — without the policy the write is
+  filtered out (the app now reports that loudly instead of faking success).
+- **One-time promo codes**: DONE — `DISHWELCOME` once-per-account and
+  first-order-only, `FAST10` repeatable, spent on order placement, released on
+  cancellation. `promo-schema.sql` is optional (degrades to per-browser
+  enforcement). Rules live once in `DD_DATA.checkPromo`; see section 4.
+- **Dark cinematic hero variant**: DONE — hero-only toggle, remembered per
+  browser, OS dark-mode default. Sections 4 + README.
+- Backlog from an external review, triaged & real (remaining): bulk admin
+  actions (advance many orders), push-notification simulation on status change,
   XSS audit (ensure UI.esc on every user-generated render), loading states
-  for first cloud fetch. Rejected as stale: print receipt (exists), dark
-  mode and i18n (owner has not asked).
+  for first cloud fetch. Rejected as stale: print receipt (exists), i18n
+  (owner has not asked). **Dark mode: the owner asked only for a dark HERO
+  VARIANT, not a site-wide theme** — do not "promote" `.hero.is-cinematic`
+  into a full dark mode without being asked; the rest of the site is a cream
+  design system and the hero only reads as cinematic because it melts into it.
 - Footer Account column shows "Sign in" even while signed in (`ui.js`,
   header/drawer are session-aware, footer is not).
 - Seed order dates in data.js are anchored to **Date.now()** (not a fixed
