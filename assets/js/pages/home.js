@@ -5,6 +5,10 @@
   const S = window.DD_STORE;
   const UI = window.DD_UI;
 
+  // Held at module level so the foods-broadcast re-init can never stack a
+  // second rotation interval on top of the first.
+  let heroTimer = null;
+
   function init() {
     // stats
     document.querySelectorAll('[data-dish-count]').forEach(function (n) { n.textContent = S.foods().length; });
@@ -45,6 +49,23 @@
 
     UI.reveal(document);
     UI.cartUISync(false);
+
+    // Hero photo crossfade: rotate the backdrop every 6.5s. The previous
+    // slide is only hidden after the 2.4s fade completes, so the two are
+    // briefly blended — never a flash of empty background. Skips ticks while
+    // the tab is hidden (background throttling makes timers unreliable anyway)
+    // and does not run at all under prefers-reduced-motion.
+    const slides = document.querySelectorAll('.hero-bg-slide');
+    if (slides.length > 1 && !window.matchMedia('(prefers-reduced-motion: reduce)').matches && !heroTimer) {
+      let cur = 0;
+      heroTimer = setInterval(function () {
+        if (document.hidden) return;
+        const prev = slides[cur];
+        cur = (cur + 1) % slides.length;
+        slides[cur].classList.add('is-on');
+        setTimeout(function () { prev.classList.remove('is-on'); }, 2600);
+      }, 6500);
+    }
     // Re-render stats/categories/trending when the cloud catalog lands after
     // first paint (or an admin edits the menu in another tab).
     if (S.on) S.on('foods', init);

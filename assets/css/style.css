@@ -251,11 +251,22 @@ input[type=checkbox].switch:checked::after{left:21px}
 
 /* ---------- 9. Hero (home) ---------- */
 .hero{position:relative;overflow:hidden;padding:52px 0 68px}
-.hero::before{content:"";position:absolute;inset:0;background:
+
+/* Photo backdrop: three slides crossfade; tint keeps text readable;
+   the bottom gradient melts the photo into the page background so
+   scrolling never meets a hard edge. Degrades to the plain cream hero
+   if images never load. */
+.hero-bg{position:absolute;inset:0;z-index:0;pointer-events:none}
+.hero-bg-slide{position:absolute;inset:0;background-size:cover;background-position:center 42%;opacity:0;transition:opacity 2.4s ease;will-change:opacity}
+.hero-bg-slide.is-on{opacity:1}
+.hero-bg-tint{position:absolute;inset:0;background:
+  linear-gradient(100deg,rgba(250,246,240,.94) 0%,rgba(250,246,240,.78) 34%,rgba(250,246,240,.30) 68%,rgba(250,246,240,.18) 100%)}
+.hero-bg-fade{position:absolute;left:0;right:0;bottom:0;height:44%;background:linear-gradient(to bottom,rgba(250,246,240,0),var(--bg))}
+.hero::before{content:"";position:absolute;inset:0;z-index:1;background:
   radial-gradient(600px 340px at 12% -10%,rgba(255,132,66,.14),transparent 60%),
   radial-gradient(700px 460px at 100% 8%,rgba(240,100,24,.1),transparent 55%);
   pointer-events:none}
-.hero-inner{position:relative;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+.hero-inner{position:relative;z-index:2;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
 .hero h1{font-size:clamp(2.2rem,4.6vw,3.55rem);letter-spacing:-.035em;line-height:1.08}
 .hero h1 .grad{background:linear-gradient(115deg,var(--brand-600),var(--brand-400));-webkit-background-clip:text;background-clip:text;color:transparent}
 .hero .lead{color:var(--ink-2);font-size:clamp(1rem,1.5vw,1.13rem);margin:18px 0 24px;max-width:520px}
@@ -762,6 +773,7 @@ input[type=checkbox].switch:checked::after{left:21px}
 }
 @media (max-width:1020px){
   .hero-inner{grid-template-columns:1fr;gap:44px}
+  .hero-bg-tint{background:linear-gradient(180deg,rgba(250,246,240,.93) 0%,rgba(250,246,240,.80) 100%)}
   .hero-media{min-height:380px;max-width:560px;margin:0 auto;width:100%}
   .testi-grid{grid-template-columns:1fr;max-width:520px}
   .detail-layout{grid-template-columns:1fr}

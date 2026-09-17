@@ -312,6 +312,32 @@ The maths layer (`summarize`, `revenueByMethod`, `heatmap`, `lagosParts`,
 `csvEscape` …) is pure and DOM-free, exposed read-only as `window.DD_REPORTS_TEST`
 so it can be asserted without a browser.
 
+## Homepage hero backdrop
+
+The hero sits on three photographs (fine-dining scene, food spread, shared
+table — Unsplash IDs verified live before shipping) that **crossfade every
+6.5 s over 2.4 s**. The pieces, all in `index.html` + `style.css` section 9:
+
+- `.hero-bg-slide` ×3 — full-bleed `background-image` divs, `opacity 0→1`;
+  the rotation script lives in `home.js`.
+- `.hero-bg-tint` — a left→right cream wash (94%→18% opacity) so the
+  headline/search side stays fully readable while the photo breathes on the
+  right, echoing the darkened-hero pattern of the reference sites but in
+  DishDash's palette. Below 1020 px the text spans full width, so the tint
+  switches to a stronger uniform top→bottom wash.
+- `.hero-bg-fade` — the bottom 44% of the hero is a transparent→`--bg`
+  gradient, so scrolling past the photo never meets a hard edge.
+
+Layer order inside `.hero`: photo slides `z-0` → orange glows (`.hero::before`)
+`z-1` → content (`.hero-inner`) `z-2`.
+
+Guard rails in the `home.js` rotation: the timer is held at module level so
+the foods-broadcast re-init can't stack intervals; ticks are skipped while
+the tab is hidden; and the global `prefers-reduced-motion` rule already
+flattens all transitions, so no motion runs for those users. If Unsplash is
+unreachable the slides are transparent and the hero degrades to the original
+cream look — the emoji fallbacks in the foreground collage are untouched.
+
 ## Dish management & images (admin)
 
 The add/edit dish form (`admin/foods.js`) takes a real photo instead of a
@@ -381,6 +407,7 @@ form is what actually lands in storage rather than whatever was typed.
 | 7 | Browsable homepage when signed out / after logout | Mostly done — one known papercut: the footer's Account column still shows "Sign in" while a session is active |
 | — | Demo launcher & session hygiene | **Done** — isolated demo browser profiles, `?fresh=1` clean start, “Signed in as …” switch-account bar, role-aware landing, stale-session sweep |
 | 8 | Improved dish-adding flow incl. images/thumbnails | **Done** — drag-drop/click upload with client-side resize to a web thumbnail, data-URL stored in `foods.img` (both modes), `D.img()` passthrough for any URL, inline per-field errors, local quota guard; add/edit/delete verified end-to-end in cloud mode |
+| — | Homepage hero photo backdrop w/ crossfade + scroll fade | **Done** — 3 verified Unsplash photos crossfading 2.4s every 6.5s, cream tint for text contrast, bottom melt into page bg; reduced-motion safe; degrades to cream hero offline |
 | — | Order cancellation (customer while pending, admin refuse) | Not started |
 | — | Bulk admin actions (advance many orders at once) | Not started |
 | — | Push-notification simulation on status change | Not started |

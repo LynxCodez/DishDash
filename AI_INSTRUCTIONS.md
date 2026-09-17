@@ -299,6 +299,18 @@ it, so image handling changes belong in `D.img()` + the form, not per page.
 Local-mode `write()` reports "Storage is full" on QuotaExceededError instead
 of silently dropping the write — keep that guard when touching store.js.
 
+**Hero backdrop (index.html).** Layer contract inside `.hero`, bottom-up:
+`.hero-bg` (z-0: three `.hero-bg-slide` photo divs + `.hero-bg-tint` +
+`.hero-bg-fade`) → `.hero::before` glows (z-1) → `.hero-inner` content
+(z-2). The rotation lives in `home.js` behind three guards: module-level
+`heroTimer` (the foods-broadcast re-init must not stack intervals), a
+`document.hidden` tick-skip, and the global reduced-motion rule. The bottom
+44% `.hero-bg-fade` must always end exactly at `var(--bg)` — that is what
+makes the photo melt into the page with no seam. Any new hero photo must be
+curl-checked for HTTP 200 BEFORE being committed (a dead Unsplash ID just
+silently shows nothing). If all photos fail, the hero degrades to the plain
+cream gradient — by design, do not "fix" that with a placeholder photo.
+
 ## 5. Conventions
 
 - Vanilla JS, ES5-ish style, no modules, no transpile: each page's controller
