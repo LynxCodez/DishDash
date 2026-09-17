@@ -1151,6 +1151,34 @@ window.DD_UI = (function () {
     cartUISync(false);
     bindGlobalDelegates();
     startOrderWatch();
+    /* Confirmation links return from the inbox carrying the session in the URL
+       and sign the customer in on whatever page they land on. Say so — the
+       silent version looked like the click had done nothing at all. */
+    if (window.DD_CLOUD && window.DD_CLOUD.linkLanding && window.DD_STORE_SYNC
+        && window.DD_STORE_SYNC.whenAuthReady) {
+      const landing = window.DD_CLOUD.linkLanding();
+      if (landing) {
+        // wait for the cloud layer: the fragment is only consumed during init
+        window.DD_STORE_SYNC.whenAuthReady().then(function () {
+          if (!window.DD_CLOUD.active()) return;
+          if (landing.error) {
+            toast('That confirmation link did not work',
+              landing.expired
+                ? 'It has expired or was already used. Send a new code from the verify page.'
+                : 'Please request a fresh confirmation email.', 'error', 6500);
+            return;
+          }
+          // Only claim success when a session really exists — an expired or
+          // hand-edited fragment must not produce a cheerful lie.
+          if (window.DD_STORE.currentUser()) {
+            toast('Email confirmed 🎉', 'You are signed in — ordering is unlocked.');
+          } else {
+            toast('Confirmation link opened', 'Sign in to continue — or enter the code from the email.', 'info', 6000);
+          }
+        }).catch(function () { /* never block the page on a nicety */ });
+      }
+    }
+
     // live rating chips: repaint food grids when reviews change in-page (cloud realtime)
     if (window.DD_STORE.on) {
       window.DD_STORE.on('reviews', function () { rerenderFoodGrids(); });

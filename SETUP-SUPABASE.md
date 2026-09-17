@@ -86,7 +86,33 @@ The app supports both and picks automatically — no code change either way:
 | "Confirm email" | What the customer experiences |
 |---|---|
 | **OFF** (default) | A 6-digit code appears in a labelled **Demo inbox** panel on `verify.html`. Nothing is emailed, so it works offline, for any address, as often as you like. |
-| **ON** | A real confirmation email is sent to whatever address was entered. Requires custom SMTP (below). |
+| **ON** | A real confirmation email is sent to whatever address was entered, carrying a **6-digit code** you type into `verify.html` (and a link). Requires custom SMTP **and** the template edit below. |
+
+### Make the email carry a code (do this if "Confirm email" is ON)
+
+The app asks the customer to **type a 6-digit code** into `verify.html`. Supabase's
+default template only contains a link, so until you add the code the email says
+"follow this link" while the page asks for a code.
+
+**Authentication → Email Templates → Confirm signup** — replace the body with:
+
+```html
+<h2>Confirm your DishDash email</h2>
+<p>Enter this code on the verification page to switch ordering on:</p>
+<p style="font-size:28px;font-weight:700;letter-spacing:4px">{{ .Token }}</p>
+<p>Or use this link: <a href="{{ .ConfirmationURL }}">confirm my email</a></p>
+<p>If you didn't sign up for DishDash, ignore this message.</p>
+```
+
+`{{ .Token }}` is the 6-digit OTP and `{{ .ConfirmationURL }}` the link; keeping
+both means either route works. The code expires (default 1 hour) and is
+single-use.
+
+> **Why a code and not just the link?** A link is opened by the operating
+> system's default browser. If you demonstrate in a dedicated demo browser
+> profile (`start-demo.bat`), the link confirms the account but drops the session
+> into your everyday browser instead. A code typed into the page already open in
+> front of you has no such problem.
 
 For the real-email path, Supabase's built-in mail service only delivers to
 **your own organisation's team addresses** and is capped at ~2 emails/hour, so
@@ -167,6 +193,9 @@ the sign-in page, or open `login.html?fresh=1` for a guaranteed clean start.
 | "operator does not exist: text <> bytea" | Same — older file version in the DB. Re-paste, then click "Send a new code" on the verify page (codes minted by the old function have invalid hashes) |
 | Confirmation email never arrives | Built-in SMTP only reaches your own team's addresses; configure custom SMTP (Step 5) |
 | Email link lands on a dead page | Set Site URL to `http://localhost:5173` and demo on that exact port |
+| The email has only a link, but the page asks for a 6-digit code | The Confirm-signup template was not edited — paste the snippet in Step 5 (or just click the link in the same browser) |
+| Clicking the email link opens your everyday browser, not the demo one | Expected: Windows opens links in the default browser, which no web page can choose. Type the code instead, or copy the link's address and paste it into the demo browser |
+| A correct 6-digit code is rejected | Codes expire (default 1 hour) and are single-use; only the newest email works. Click **Send a new code** and use that one |
 | Demo account can no longer order | Should not happen — accounts are grandfathered. Check the Step 5 migration actually ran |
 | Admin's Verify Payment dialog shows no paying-account details | Step 6 not run — the `orders.pay_account` column is missing, so cloud mode drops the snapshot by design |
 | Demo starts already signed in as the previous account | Expected: a Supabase session outlives the window. `start-demo.bat` opens `login.html?fresh=1` (clean start); otherwise use **Sign out** in the “Signed in as …” bar |

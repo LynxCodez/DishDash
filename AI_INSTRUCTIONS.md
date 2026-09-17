@@ -61,10 +61,29 @@ There is no `npm test`. The established verification pattern is:
 8. ⚠️ **Do NOT blank `supabase-config.js` to force local mode.** It is the one
    file in this project that holds a value the AI cannot regenerate (the anon
    key), and on 2026-09-16 blanking it for a walkthrough **destroyed the key**
-   — there is no git repo here and no backup, so the owner had to re-paste it
-   from the Supabase dashboard. If you must switch modes, do it with a
-   byte-exact copy (`cp` to a sibling file first — never retype the key from
-   memory), or better, use the stub-client harness in point 5.
+   — the owner had to re-paste it from the Supabase dashboard. If you must
+   switch modes, do it with a byte-exact copy (`cp` to a sibling file first —
+   never retype the key from memory), or better, use the stub-client harness in
+   point 5. (There is now a git repo with a GitHub remote — `baseline 21d89c5`
+   — so `git diff`/`git checkout` can rescue you, but never rely on that for a
+   value that was never committed.)
+9. **Browser-preview traps that will waste an hour if you don't know them**
+   (learned the hard way on 2026-09-17):
+   - **A URL change that alters only the `#hash` does NOT reload the page** in
+     the preview webview. You will then inspect a stale document and draw
+     completely wrong conclusions (a feature looked broken for ~8 probes).
+     Always change the **path or query** to force a real load — on a throwaway
+     probe page, bump `?v=`; on a real page, add `?r=2`.
+   - Timers are **throttled** while the preview tab is unfocused (`setInterval`
+     collapses toward 1/s), so a tick-loop that measures how long a toast stays
+     on screen reports nonsense. Use a single `setTimeout` and check one moment,
+     or better, assert on a marker the code sets rather than on elapsed time.
+   - To test a page state that needs a *signed-in* or *pending* session, copy the
+     page to a throwaway probe (`.html` at the repo root, deleted after) and stub
+     `DD_STORE.currentUser` **from inside `whenAuthReady().then(...)`** —
+     `install()` re-assigns `currentUser` when the cloud adapter mounts, so a
+     stub applied earlier is silently overwritten. Real verify.js, real code
+     path, no database writes.
 
 ## 3. Supabase: what the AI can and cannot do
 
@@ -134,6 +153,38 @@ There is no `npm test`. The established verification pattern is:
   `POST /auth/v1/signup` probe.
 
 **Email verification (`store.js`).**
+- **A used confirmation link must be acknowledged, not silent.** Supabase
+  returns the session in the URL **fragment** (`#access_token=…`), and
+  supabase-js consumes and clears it during `init()`. So `DD_CLOUD.linkLanding()`
+  snapshots `location.hash` **at script load**, before that happens, and
+  `ui.js` toasts the outcome after `whenAuthReady()`: "Email confirmed 🎉" only
+  when a session genuinely exists, "That confirmation link did not work" for an
+  expired one. Before this, clicking the link looked like it had done nothing —
+  the exact complaint that started this work. Don't read the hash later; it is
+  gone by then, and don't claim success from the fragment alone.
+- **The emailed confirmation is a TYPED 6-DIGIT CODE, not a link** (link mode
+  still honours the link, but the code is the primary path). Reason, learned the
+  hard way: a link in an email is opened by the OS **default browser**, which no
+  web page can influence. In the `start-demo.bat` setup the link therefore
+  confirmed the account *and* landed the session in the user's everyday browser,
+  while the demo-profile browser held no session at all (link-mode sign-up issues
+  none) and had no way to finish. Do not "simplify" this back to a link-only flow.
+- `confirmSignupOtp(email, code)` lives in the **cloud sync module** (not the
+  page) and calls `auth.verifyOtp()`, which needs NO session — the session comes
+  back in the response body, so it works from the signed-out "check your inbox"
+  screen. It tries `type: 'email'` (the type Supabase documents for this OTP,
+  with `{{ .Token }}` in the Confirm-signup template) and then `type: 'signup'`,
+  because a wrong type and a wrong code produce the SAME "invalid" error — the
+  fallback is the only way to be sure. A failed verify does not consume the
+  token, so the retry is safe. If `data.user` comes back with no session the
+  function returns `{ ok: true, signedIn: false }` and the page sends the
+  customer to sign in rather than claiming they are logged in.
+- **The code only exists if the Supabase template is edited** (Authentication →
+  Email Templates → Confirm signup must contain `{{ .Token }}`). Servers, not
+  code, decide this; `SETUP-SUPABASE.md` Step 5 carries the exact snippet. If a
+  correct code is ever rejected in the field, the first thing to check is the
+  template, the second is whether the newest email was used (codes are
+  single-use and expire).
 - `emailVerified()` intentionally trusts Supabase's `emailConfirmed` **only
   in email-link mode**. With "Confirm email" OFF (this project's setting),
   Supabase auto-confirms every sign-up — trusting that stamp in code mode
@@ -322,8 +373,15 @@ screen; later pushes reuse the stored credential.
 - `setup-demo.html` is the one-click wizard: it seeds Supabase and signs seed
   users in, which is why the SQL deliberately keeps "Confirm email" OFF.
   If that setting is turned ON for real email links, newly wizard-created
-  users will need confirmation first — the app handles it (link mode), the
-  wizard's instant sign-in does not.
+  users will need confirmation first — the app handles it (typed code or link),
+  the wizard's instant sign-in does not.
+- Before reporting an email-verification change as done, re-read this:
+  the emailed code path can only be *proved* end to end with a real inbox. What
+  IS provable without one — and should be, every time — is that the page renders
+  both link-mode panels, that a wrong code reaches `POST /auth/v1/verify` (expect
+  two 403s, one per attempted type) and maps to the friendly inline error, and
+  that nothing throws. A throwaway probe page that stubs `DD_STORE.currentUser`
+  after `whenAuthReady()` is the cheapest way to reach the signed-in panel.
 - The live Supabase project may contain throwaway test accounts
   (`live.test.dd@gmail.com` etc.) from verification testing — safe for the
   user to delete from the Supabase dashboard (Authentication → Users).

@@ -599,6 +599,10 @@ window.DD_STORE = (function () {
   function resendConfirmationEmail() {
     return { ok: false, error: 'Confirmation emails need Supabase (cloud mode) — in local mode use the in-app code.' };
   }
+  /* Typed email codes are a real-mail feature too. */
+  function confirmSignupOtp() {
+    return { ok: false, error: 'The email code needs Supabase (cloud mode) — in local mode use the in-app code.' };
+  }
 
   /* ---------------- promo codes ---------------- */
   function validatePromo(code, sub) {
@@ -887,7 +891,7 @@ window.DD_STORE = (function () {
     validateNuban, resolveBankAccount,
     // verification
     emailVerified, verificationInstalled, requestEmailCode, confirmEmailCode,
-    verificationMode, markEmailVerified, resendConfirmationEmail, lastDemoCode,
+    verificationMode, markEmailVerified, resendConfirmationEmail, confirmSignupOtp, lastDemoCode,
     // reviews & feedback
     reviews, foodReviews, ratingSummary, allRatingSummaries, isVerifiedBuyer, addReview, updateReview, deleteReview, feedbackSubmit,
     // admin catalog
@@ -1210,7 +1214,7 @@ window.DD_STORE_SYNC = (function () {
         setVerificationMode('link');
         return {
           ok: false, pendingEmail: true, verificationMode: 'link',
-          error: 'This email has not been confirmed yet — open the link we sent you, or resend it below.'
+          error: 'This email is not confirmed yet — enter the 6-digit code we emailed you, or send a fresh one.'
         };
       }
       const msg = /invalid login credentials/i.test(error.message || '')
@@ -1471,6 +1475,74 @@ window.DD_STORE_SYNC = (function () {
     return { ok: true };
   }
 
+  /* How a failed code is explained — the raw GoTrue strings are all "token has
+     expired or is invalid", which reads as if the customer mistyped when the
+     code may simply be superseded by a newer email. */
+  function friendlyOtpError(err) {
+    const msg = (err && err.message) || '';
+    if (/already confirmed|already been confirmed/i.test(msg)) {
+      return 'This email is already confirmed — sign in instead.';
+    }
+    if (/rate limit|too many|for security purposes/i.test(msg)) {
+      return 'Too many attempts — wait a minute, then request a fresh code.';
+    }
+    if (/expired|invalid/i.test(msg)) {
+      return 'That code is not correct, or it has expired. Request a new one and use the newest email.';
+    }
+    return msg || 'Could not confirm that code. Please try again.';
+  }
+
+  /* Email-OTP mode: the customer types the 6-digit code from the confirmation
+     email into the browser they registered in.
+
+     This is the only confirmation path the app can finish by itself. A LINK is
+     handed to the operating system's default browser — a choice no web page
+     can influence — so the resulting session lands in that browser, while this
+     one holds no session at all (link-mode sign-up issues none) and could
+     never complete. A typed code has no such coupling.
+
+     verifyOtp needs no session: the session arrives in the response body, so
+     this runs straight from the signed-out "check your inbox" panel. */
+  async function confirmSignupOtp(email, code) {
+    const target = String(email || '').trim().toLowerCase();
+    const token = String(code == null ? '' : code).trim();
+    if (!target) return { ok: false, error: 'We need the email address you registered with.' };
+    if (!/^\d{6}$/.test(token)) return { ok: false, error: 'Enter the 6-digit code from the email.' };
+
+    /* Supabase documents type 'email' for this OTP in its own email-template
+       guide and also accepts 'signup' for the same token; try both so a change
+       on their side cannot strand the flow. A wrong type answers "invalid",
+       indistinguishable from a wrong code — which is why both are attempted
+       before the customer is told anything. */
+    const types = ['email', 'signup'];
+    let last = null;
+    for (let i = 0; i < types.length; i++) {
+      let out;
+      try {
+        out = await withTimeout(
+          state.client.auth.verifyOtp({ email: target, token: token, type: types[i] }),
+          15000, 'Checking the code');
+      } catch (e) {
+        last = { message: (e && e.message) || 'Could not check that code.' };
+        continue;
+      }
+      if (!out.error && out.data && out.data.user) {
+        const uid = out.data.user.id;
+        if (!out.data.session) {
+          /* Confirmed, but no session to hand back — the panel sends the
+             customer to sign in rather than claiming they are logged in. */
+          return { ok: true, email: target, signedIn: false };
+        }
+        await startSession(uid);            // pull the profile, refresh the shadow
+        try { await markEmailVerified(); }  // mirror it onto our own flag
+        catch (e) { /* best effort — the Supabase stamp is authoritative */ }
+        return { ok: true, email: target, signedIn: true };
+      }
+      last = out.error || { message: 'That code did not check out.' };
+    }
+    return { ok: false, error: friendlyOtpError(last) };
+  }
+
   async function markEmailVerified() {
     const { data, error } = await state.client.rpc('mark_email_verified');
     if (error) return { ok: false, error: rpcError(error, 'Could not record your confirmation.') };
@@ -1690,7 +1762,7 @@ window.DD_STORE_SYNC = (function () {
     registerUser, login, logout, currentUser, updateProfile,
     pullOrders, pullCatalog, pullUsers, placeOrder, updateOrder,
     pullReviews, addReviewCloud, updateReviewCloud, deleteReviewCloud, feedbackSubmitCloud,
-    requestEmailCode, confirmEmailCode, markEmailVerified, resendConfirmationEmail, lastDemoCode,
+    requestEmailCode, confirmEmailCode, markEmailVerified, resendConfirmationEmail, confirmSignupOtp, lastDemoCode,
     setVerificationMode, verificationMode,
     upsertFood, deleteFood, saveCategories, deleteCategory,
     toggleFav, getFavIds,
@@ -1710,6 +1782,25 @@ window.DD_STORE_SYNC = (function () {
 window.DD_CLOUD = (function () {
   const S = window.DD_STORE;
   const Y = window.DD_STORE_SYNC;
+
+  /* A confirmation LINK comes back from the inbox with the session in the URL
+     fragment (#access_token=…). supabase-js consumes it and clears the hash
+     during init(), so it has to be read NOW, at script load — afterwards there
+     is no trace of how the session arrived, which is why clicking the link used
+     to look like nothing happened. Read-only; it changes no behaviour. */
+  const LANDING_HASH = (function () {
+    try { return String(window.location.hash || ''); } catch (e) { return ''; }
+  })();
+
+  function linkLanding() {
+    if (!LANDING_HASH) return null;
+    if (/error_code=|error_description=/.test(LANDING_HASH)) {
+      return { error: true, expired: /otp_expired/.test(LANDING_HASH) };
+    }
+    if (/access_token=/.test(LANDING_HASH)) return { confirmed: true };
+    return null;   // a normal #anchor, not an auth callback
+  }
+
   let sessionCache = null;   // cloud session (null = signed out)
   let favsCache = [];        // cloud favorite food ids
   let usersCache = [];       // admin: profiles
@@ -1843,6 +1934,13 @@ window.DD_CLOUD = (function () {
     S.confirmEmailCode = function (code) { return Y.confirmEmailCode(code); };
     S.markEmailVerified = function () { return Y.markEmailVerified(); };
     S.resendConfirmationEmail = function (email) { return Y.resendConfirmationEmail(email); };
+    S.confirmSignupOtp = function (email, code) {
+      return Y.confirmSignupOtp(email, code).then(function (res) {
+        // a successful verifyOtp already established the session
+        if (res.ok && res.signedIn) return refreshSession().then(function () { return res; });
+        return res;
+      });
+    };
     S.lastDemoCode = function () { return Y.lastDemoCode(); };
     S.verificationMode = function () { return Y.verificationMode(); };
 
@@ -1995,6 +2093,6 @@ window.DD_CLOUD = (function () {
 
   document.addEventListener('DOMContentLoaded', boot);
 
-  return { active: active, refreshSession: refreshSession };
+  return { active: active, refreshSession: refreshSession, linkLanding: linkLanding };
 })();
 

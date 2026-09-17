@@ -329,8 +329,9 @@
               UI.toast('Could not register', res.error, 'error');
               return;
             }
-            // Email-link mode: sign-up returns no session, so there is nothing
-            // signed in yet — verify.html walks them through the inbox step.
+            // Email-confirmation mode: sign-up returns no session, so there is
+            // nothing signed in yet — verify.html asks for the emailed 6-digit
+            // code (typed here, so no browser hand-off).
             if (res.pendingEmail) {
               UI.toast('Account created 🎉', 'One step left — confirm your email address.');
               setTimeout(function () {

@@ -8,9 +8,12 @@
    • in-app code  — the project auto-confirms, so we mint a 6-digit
                     code and show it in a clearly-labelled demo
                     inbox. No email is sent to anyone.
-   • email link   — the project sends a real confirmation email;
-                    we explain the inbox round-trip, offer a resend,
-                    and notice when the customer comes back confirmed.
+   • email code   — the project sends a real confirmation email
+                    carrying a 6-digit code ({{ .Token }}) plus a link.
+                    The code is the primary path: it is typed into this
+                    page, so confirmation never depends on which browser
+                    the operating system opens the link in. The link is
+                    still honoured — we notice when it arrives here.
 
    The mode is decided in store.js from how Supabase answers a sign-up;
    this page only presents it.
@@ -46,30 +49,91 @@
   }
 
   /* ------------------------------------------------------------
-     Signed out, waiting on a confirmation link. Reached right
-     after registering in email-link mode (there is no session
-     until the link is opened), which is why it cannot use RPCs.
+     The typed email code. Used by both link-mode panels, because it
+     is the one confirmation path that cannot be handed to another
+     browser: the customer types the code into the page already open
+     in front of them. A link is opened by the operating system's
+     default browser — a choice no web page can influence.
   ------------------------------------------------------------ */
-  function renderAwaitLink(email) {
-    stopTick();
-    view.innerHTML =
-      '<div class="verify-wrap">'
-      + '<div class="verify-card">'
-      +   '<div class="vf-ico vf-ico-mail">' + UI.ic('mail') + '</div>'
-      +   '<h1>Check your inbox</h1>'
-      +   '<p class="lead">We sent a confirmation link'
-      +     (email ? ' to <b>' + UI.esc(email) + '</b>' : '') + '. '
-      +     'Open it and you will be signed in with ordering unlocked.</p>'
-      +   '<div class="vf-note">' + UI.ic('info')
-      +     '<span>Nothing arrived? Check the spam folder first — confirmation mail often lands there. '
-      +     'You can also resend it below.</span></div>'
-      +   '<div class="vf-actions">'
-      +     '<button class="btn btn-primary btn-lg" id="vfResend">Resend the email</button>'
-      +     '<a class="btn btn-outline btn-lg" href="login.html">Back to sign in</a>'
-      +   '</div>'
-      + '</div></div>';
+  function codeFormHtml() {
+    return '<form id="vfOtp" novalidate>'
+      + '<div class="field">'
+      +   '<label for="vfOtpInput">6-digit code from the email</label>'
+      +   '<input class="input vf-input" id="vfOtpInput" inputmode="numeric" autocomplete="one-time-code"'
+      +     ' maxlength="6" placeholder="••••••" aria-describedby="vfOtpErr">'
+      +   '<span class="err" id="vfOtpErr">Enter the 6-digit code from the email.</span>'
+      + '</div>'
+      + '<button class="btn btn-primary btn-lg btn-block" type="submit" id="vfOtpSubmit">Confirm my email</button>'
+      + '</form>';
+  }
 
+  function wireCodeForm(email) {
+    const form = document.getElementById('vfOtp');
+    if (!form) return;
+    const input = document.getElementById('vfOtpInput');
+    const field = input.closest('.field');
+    const errEl = document.getElementById('vfOtpErr');
+    const submit = document.getElementById('vfOtpSubmit');
+
+    function showError(msg) {
+      errEl.textContent = msg;
+      field.classList.add('invalid');
+      form.classList.add('shake-err');
+      setTimeout(function () { form.classList.remove('shake-err'); }, 420);
+    }
+
+    // digits only, and submit as soon as six are in — no reaching for a button
+    input.addEventListener('input', function () {
+      const clean = input.value.replace(/\D/g, '').slice(0, 6);
+      if (clean !== input.value) input.value = clean;
+      field.classList.remove('invalid');
+      if (clean.length === 6) form.requestSubmit();
+    });
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      const code = input.value.trim();
+      if (code.length !== 6) { showError('Enter the 6-digit code from the email.'); return; }
+      if (typeof S.confirmSignupOtp !== 'function') {
+        showError('Email codes need Supabase — in local mode use the in-app code.');
+        return;
+      }
+      submit.disabled = true;
+      submit.innerHTML = '<span class="spinner"></span> Confirming…';
+      Promise.resolve(S.confirmSignupOtp(email, code))
+        .then(function (res) {
+          if (res && res.ok) {
+            stopTick();
+            if (res.signedIn === false) {
+              // confirmed on the server, but no session came back — sign in
+              UI.toast('Email confirmed 🎉', 'Sign in to finish setting up your account.');
+              setTimeout(function () { UI.go('login.html?next=' + encodeURIComponent(nextUrl())); }, 900);
+              return;
+            }
+            goHome('Your email is confirmed — ordering is unlocked.');
+            return;
+          }
+          showError((res && res.error) || 'Could not confirm that code.');
+          // the field auto-submits on the sixth digit, so a full wrong value
+          // would swallow the next keystroke
+          input.value = '';
+          input.focus();
+        })
+        .catch(function (e2) {
+          showError((e2 && e2.message) || 'Could not confirm that code.');
+        })
+        .then(function () {
+          submit.disabled = false;
+          submit.textContent = 'Confirm my email';
+        });
+    });
+  }
+
+  /* Resend lives in both link-mode panels with the same wiring — and, in
+     email-OTP mode, a resend is also how you get a fresh CODE. */
+  function wireResend(email) {
     const btn = document.getElementById('vfResend');
+    if (!btn) return;
     btn.addEventListener('click', function () {
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span> Sending…';
@@ -83,30 +147,71 @@
         })
         .then(function () {
           btn.disabled = false;
-          btn.textContent = 'Resend the email';
+          btn.textContent = 'Send a new code';
         });
     });
   }
 
   /* ------------------------------------------------------------
-     Signed in, email-link mode: the link has not been opened yet.
-     Poll gently so the page notices when it is.
+     Signed out, waiting on the email. Reached right after
+     registering in email-link mode (there is no session until the
+     email is confirmed), which is why it cannot use RPCs.
+  ------------------------------------------------------------ */
+  function renderAwaitLink(email) {
+    stopTick();
+    view.innerHTML =
+      '<div class="verify-wrap">'
+      + '<div class="verify-card">'
+      +   '<div class="vf-ico vf-ico-mail">' + UI.ic('mail') + '</div>'
+      +   '<h1>Check your inbox</h1>'
+      +   '<p class="lead">We emailed a 6-digit confirmation code'
+      +     (email ? ' to <b>' + UI.esc(email) + '</b>' : '') + ' — the same message also carries a link. '
+      +     'Type the code below to switch ordering on.</p>'
+      +   codeFormHtml()
+      +   '<div class="vf-note">' + UI.ic('info')
+      +     '<span>Using that link instead? Open it in <b>this</b> browser — link clicks are handled by your '
+      +     'computer\'s default browser, which this page has no say over.</span></div>'
+      +   '<div class="vf-secondary">'
+      +     '<span class="vf-hint">Nothing yet? Check the spam folder — and if you confirmed on another device, just sign in.</span>'
+      +     '<button class="btn btn-ghost btn-sm" type="button" id="vfResend">Send a new code</button>'
+      +   '</div>'
+      +   '<div class="vf-actions">'
+      +     '<a class="btn btn-outline btn-lg" href="login.html">Back to sign in</a>'
+      +   '</div>'
+      + '</div></div>';
+
+    wireCodeForm(email);
+    wireResend(email);
+  }
+
+  /* ------------------------------------------------------------
+     Signed in, email-OTP mode: the email has not been confirmed yet.
+     Offer the code form, and poll gently so that if the customer does
+     use the link in this browser we notice without them saying so.
   ------------------------------------------------------------ */
   function renderLinkPanel(user) {
     view.innerHTML =
       '<div class="verify-wrap">'
       + '<div class="verify-card">'
       +   '<div class="vf-ico vf-ico-mail">' + UI.ic('mail') + '</div>'
-      +   '<h1>One click to go</h1>'
-      +   '<p class="lead">We sent a confirmation link to <b>' + UI.esc(user.email) + '</b>. '
-      +     'Open it, then come back to this tab — we will pick it up automatically.</p>'
+      +   '<h1>One step to go</h1>'
+      +   '<p class="lead">We emailed <b>' + UI.esc(user.email) + '</b> a 6-digit confirmation code — '
+      +     'the same message also carries a link. Type the code below to unlock ordering.</p>'
+      +   codeFormHtml()
       +   '<div class="vf-note">' + UI.ic('info')
-      +     '<span>Ordering stays locked until your address is confirmed. Resend if it never arrived.</span></div>'
+      +     '<span>Prefer the link in that email? Open it in <b>this</b> browser — then this page picks it up '
+      +     'by itself. Ordering stays locked until your address is confirmed.</span></div>'
+      +   '<div class="vf-secondary">'
+      +     '<span class="vf-hint">Watching for the link…</span>'
+      +     '<button class="btn btn-ghost btn-sm" type="button" id="vfResend">Send a new code</button>'
+      +   '</div>'
       +   '<div class="vf-actions">'
-      +     '<button class="btn btn-primary btn-lg" id="vfCheck">I have confirmed — continue</button>'
-      +     '<button class="btn btn-outline btn-lg" id="vfResend">Resend the email</button>'
+      +     '<button class="btn btn-outline btn-lg" id="vfCheck">I used the email link — continue</button>'
       +   '</div>'
       + '</div></div>';
+
+    wireCodeForm(user.email);
+    wireResend(user.email);
 
     const check = document.getElementById('vfCheck');
     function finish() {
@@ -126,18 +231,6 @@
         });
     }
     check.addEventListener('click', finish);
-
-    const resend = document.getElementById('vfResend');
-    resend.addEventListener('click', function () {
-      resend.disabled = true;
-      Promise.resolve(S.resendConfirmationEmail(user.email))
-        .then(function (res) {
-          if (!res || !res.ok) throw new Error((res && res.error) || 'Could not resend.');
-          UI.toast('Email sent', 'Check your inbox and spam folder.');
-        })
-        .catch(function (e) { UI.toast('Could not resend', (e && e.message) || 'Try again.', 'error'); })
-        .then(function () { resend.disabled = false; });
-    });
 
     /* Notice the moment the link is opened in another tab: re-read the auth
        session every few seconds, and immediately when this tab regains focus. */

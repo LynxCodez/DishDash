@@ -172,7 +172,26 @@ set and no code change between them:
 | Project setting | Mode | What happens |
 |---|---|---|
 | "Confirm email" **OFF** | in-app code | A 6-digit code is generated and shown in a labelled **Demo inbox** panel on `verify.html`. **Nothing is emailed.** |
-| "Confirm email" **ON** | email link | Supabase sends a real confirmation email to whatever address was entered; the page explains the inbox round-trip and detects your return. |
+| "Confirm email" **ON** | email code (link also honoured) | Supabase sends a real email carrying a **6-digit code** plus a link. The customer **types the code into `verify.html`**, which confirms the address and signs them in — no browser hand-off. Needs the one-time email-template edit in `SETUP-SUPABASE.md` → Step 5. |
+
+**Why the code is the primary path, not the link.** A link in an email is opened
+by the operating system's **default browser** — a choice no web page can
+influence. In a setup where the demo runs in its own browser profile
+(`start-demo.bat`), clicking the link therefore confirms the account *and drops
+the session into the wrong browser*, while the browser the customer actually
+registered in holds no session at all (link-mode sign-up issues none) and cannot
+finish. A code typed into the open page has no such coupling. The link still
+works — open it in the same browser and `verify.html` notices by itself — so both
+routes stay functional, and `SETUP-SUPABASE.md` carries the exact template that
+makes the email include the code.
+
+**The link is acknowledged, never silent.** When a confirmation link *is* used,
+Supabase returns the session in the URL fragment and signs the customer in on
+whichever page it lands on. The app snapshots that fragment before supabase-js
+consumes it, so it can say *"Email confirmed — ordering is unlocked"* instead of
+appearing to do nothing; an expired link gets the opposite toast. The success
+message only appears when a session really exists, so a stale or hand-edited
+fragment cannot produce a cheerful lie.
 
 **The verification logic is real, even in demo mode.** The code is generated in
 Postgres, stored only as a SHA-256 hash, expires after 10 minutes, allows five
@@ -184,11 +203,21 @@ trigger mirrors the existing `protect_role_change()` pattern so a customer canno
 write their own `email_verified_at` through the (broad) "update own profile"
 policy.
 
-**What is deliberately not real:** in demo mode no email or SMS is sent. The code
-is displayed in the app, so it demonstrates the *flow* — generation, expiry,
-attempt limits, the gate — but not ownership of the inbox. Only the email-link
-mode with custom SMTP configured proves that. Describe it as *simulated delivery,
-real verification logic*.
+**What is deliberately not real:** in the in-app (demo) mode no email or SMS is
+sent — the code is displayed in the app, so it demonstrates the *flow* —
+generation, expiry, attempt limits, the gate — but not ownership of the inbox.
+With "Confirm email" ON and custom SMTP configured, the email/OTP route proves
+ownership for real. Describe the demo mode as *simulated delivery, real
+verification logic*.
+
+**The typed code is verified by Supabase, not by us.** `verifyOtp({ email,
+ token, type })` needs no session, so it runs straight from the signed-out "check
+your inbox" screen and returns the session in its response body. Both accepted
+types (`email`, the one Supabase documents for this OTP, then `signup`) are
+tried, because a wrong type is reported with the same "invalid" message as a
+wrong code — a failure of the first cannot be mistaken for a failure of the
+customer. If a code is confirmed but no session comes back, the page says so and
+sends the customer to sign in rather than pretending they are logged in.
 
 **Re-using an address is detected, not silently swallowed.** With “Confirm
 email” ON, Supabase deliberately hides whether an address is already registered:
@@ -310,7 +339,7 @@ form is what actually lands in storage rather than whatever was typed.
 | # | Feature | State |
 |---|---------|-------|
 | 1 | Fixed 11-digit Nigerian phone (070/080/081/090/091) | **Done** — one rule in `store.js`, enforced on all four entry points and on write |
-| 2 | Email verification before ordering | **Done** — in-app code + email-link modes, server-side rules; run `verification-schema.sql` once |
+| 2 | Email verification before ordering | **Done** — in-app code mode, plus real emailed 6-digit codes (Supabase `verifyOtp`, browser-independent) with the link still honoured; server-side rules; run `verification-schema.sql` once |
 | 3 | Real bank-account number verification | **Done** — real NUBAN check-digit validation, 23-bank CBN/NIP list, resolved-name proof before the transfer can be submitted, admin sees the snapshot. Verified end-to-end in cloud mode (`pay-account-schema.sql` applied) |
 | 4 | Customer reviews & feedback | **Done** (customer-facing); admin moderation screen not built |
 | 5 | Reports system | **Done** — admin **Reports** page: period filter (7/30 days, month, all), revenue/orders/AOV/items cards with vs-previous deltas, revenue by payment method (paid money only), 7×24 peak-hours heatmap in Lagos time, CSV export |

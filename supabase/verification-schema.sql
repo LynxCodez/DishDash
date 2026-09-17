@@ -16,9 +16,12 @@
 --     • "Confirm email" OFF  → in-app code mode. request_email_code()
 --       mints a 6-digit code and returns it so the app can show it in a
 --       clearly-labelled demo panel. No email is sent to anyone.
---     • "Confirm email" ON   → real email link mode. Supabase emails the
---       confirmation itself; mark_email_verified() then mirrors the
---       result onto the profile.
+--     • "Confirm email" ON   → real email mode. Supabase emails the
+--       confirmation, carrying a 6-digit code ({{ .Token }}) plus a link.
+--       The customer types the code, the app calls auth.verifyOtp(), and
+--       mark_email_verified() then mirrors the result onto the profile.
+--       No schema change is needed for the email path: verifyOtp talks to
+--       Supabase Auth, not to these functions.
 --   In BOTH modes the ordering gate reads the same profile flag.
 -- ============================================================
 
