@@ -83,7 +83,10 @@ already signed in as whoever used it last. Two mechanisms cover that:
 **Customer** — Home · Menu (search/filter/sort/pagination) · Dish detail
 (menu story + **reviews**) · Cart · Checkout (delivery info + simulated
 payment) · Order confirmation (printable receipt) · Orders · Order tracking · Favourites ·
-Profile · **Verify email** · Sign in · Register
+Profile · **Verify email** · Sign in · Register · **FAQs** · **Terms & conditions**
+
+FAQ and terms are reachable from the **Help** column in the site footer, on
+every customer page (see “Help pages” below).
 
 **Admin** (`/admin/`) — Dashboard (stats, 7-day chart, status donut, top
 dishes) · Food items (CRUD + availability) · Categories (CRUD) · Orders
@@ -412,6 +415,39 @@ Other pieces worth knowing:
   settles — a fresh dish appears on an already-open menu tab without a
   manual reload.
 
+## Help pages (FAQs & terms)
+
+Two static, customer-facing pages sit alongside the shop, linked from the
+footer's **Help** column (FAQs · Terms & conditions · Privacy & your data ·
+Contact support):
+
+- **`faq.html` — 21 questions** in six topics (ordering, payment, delivery,
+  account & verification, promo codes, reviews), with a live search box, a
+  topic jump bar, and a **Still stuck?** card whose phone/email are built from
+  `DD_DATA.CONFIG`, so they cannot drift from the rest of the app.
+- **`terms.html` — 13 numbered sections** with a sticky index, plus a
+  **what is real / what is simulated** table. Because the project simulates
+  payments, the terms say so explicitly rather than implying a real service.
+
+**The FAQ is static-first on purpose.** Every question is a native `<details>`
+element, so the page is readable, keyboard-navigable and printable with
+JavaScript switched off. `assets/js/pages/faq.js` only layers on the extras:
+
+- **search** filters questions as you type and hides a topic heading when
+  nothing in it matches, with an honest empty state;
+- **one answer open at a time**, so the page never becomes a wall of text;
+- **deep links** — `faq.html#cancel-order`, `terms.html#privacy` and friends
+  open the right answer and scroll to it (handy for linking from a chat or a
+  slide deck during the demo).
+
+`assets/js/pages/terms.js` does two small jobs: it fills the contact details
+and the copyright year from `DD_DATA.CONFIG`/`Date`, and it highlights the
+section you are reading in the side index.
+
+The footer grid grew to five columns to fit the Help column
+(`1.55fr .9fr .9fr .9fr 1.3fr`, dropping to `1fr 1fr 1fr` under 1160px and
+`1fr 1fr` under 720px) — worth knowing before adding a sixth.
+
 ## Phone numbers
 
 One rule, defined once in `store.js` as `validatePhone` and used by every form
@@ -451,6 +487,7 @@ form is what actually lands in storage rather than whatever was typed.
 | — | Order cancellation (customer while pending, admin refuse) | **Done** — off-flow `cancelled` terminal status with a recorded reason + actor; customer button while pending, admin refuse at any point before delivery; cancelling releases any promo code the order had spent. Run `cancel-schema.sql` for cloud mode |
 | — | One-time promo codes | **Done** — `DISHWELCOME` is one use per account and first-order-only; `FAST10` stays repeatable; cancel the order and the code comes back. Run `promo-schema.sql` for cross-device enforcement |
 | — | Homepage hero: single-column layout, collage & stat chips removed | **Done** — the right-hand photo collage and the floating “Free delivery” / “12,000+ happy customers” chips are gone; free delivery moved into the proof row. A dark “cinematic” hero variant was built, **rejected by the owner and removed** — the hero is bright-only |
+| — | FAQs + Terms & conditions pages | **Done** — footer **Help** column links to `faq.html` (21 questions in six topics, live search, one-open accordion, deep links like `faq.html#cancel-order`, contact card built from `DD_DATA.CONFIG`) and `terms.html` (13 numbered sections with a sticky scroll-spy index and a demo/simulation honesty table). Both static-first: the FAQ is native `<details>`, so it still reads with JS off |
 | — | Bulk admin actions (advance many orders at once) | Not started |
 | — | Push-notification simulation on status change | Not started |
 | — | Admin analytics: revenue by method, AOV, peak-hours heatmap | **Done** — all three shipped with the Reports page (item 5) |

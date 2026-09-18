@@ -413,6 +413,17 @@ record instead of failing checkout.
   variables in `:root`. Before adding classes, grep for collisions — prefix
   features (`vf-`, `rv-`) instead of generic names.
 - Seed content only in `data.js`. No hardcoded food/user data anywhere else.
+- **Public pages are public on purpose.** `faq.html` and `terms.html` are
+  customer-facing help pages (no sign-in, no role) reached from the footer's
+  **Help** column on every customer page. Their controllers
+  (`assets/js/pages/faq.js`, `pages/terms.js`) only *enhance* static HTML —
+  the FAQ is built from native `<details>` elements so it still reads with JS
+  off, and the terms document is plain markup. Do not convert either into a
+  JS-rendered page: the whole point is that a policy/help page survives a
+  broken script. Contact details and the copyright year are filled from
+  `DD_DATA.CONFIG`/`Date` so they cannot drift.
+- The footer grid is **five columns** (`1.55fr .9fr .9fr .9fr 1.3fr`, → `1fr 1fr 1fr` under 1160px, `1fr 1fr` under 720px) since the Help column was
+  added. Adding a sixth needs a grid change, not a new class.
 - jQuery is vendored at `assets/js/vendor/jquery-3.7.1.min.js`; don't add CDNs
   or npm packages (the demo must run offline).
 - Images: `data.js` `img()` handles data-URLs, any http(s) URL, and Unsplash
@@ -473,6 +484,14 @@ screen; later pushes reuse the stored credential.
   client-side resize → data-URL in `foods.img`, `D.img()` passthrough, inline
   field errors, local quota guard, cloud add/edit/delete + menu render all
   proven in the browser. See section 4 ("Foods `id`" and "Dish images").
+- **Help pages (FAQs + terms)**: DONE (2026-09-18) — `faq.html` (21
+  questions, six topics, live search, one-open accordion, deep links, contact
+  card from `DD_DATA.CONFIG`) and `terms.html` (13 numbered sections, sticky
+  scroll-spy index, real-vs-simulated table). Linked from the footer Help
+  column. Contracts to preserve: the section/anchor ids are shareable demo
+  links (`faq.html#cancel-order`, `terms.html#privacy`) — keep them stable;
+  the FAQ stays native-`<details>` static HTML; the legal copy must stay
+  honest that payments, delivery and the bank account are simulated.
 - Admin **review/feedback moderation screen**: DB permits it, no UI.
 - Admin analytics: revenue by payment method, AOV, peak-hours heatmap —
   DONE (shipped with the Reports page).

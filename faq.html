@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FAQs — DishDash</title>
+  <meta name="description" content="Answers to common DishDash questions — ordering, payment, delivery, account verification, promo codes and reviews.">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body data-page="faq">
+  <div id="ddHeader"></div>
+
+  <main id="appMain" class="skip-target">
+    <div class="container">
+      <div class="page-head">
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <a href="index.html">Home</a>
+          <svg class="ic" aria-hidden="true"><use href="#i-chev-r"></use></svg>
+          <span aria-current="page">FAQs</span>
+        </nav>
+        <h1>Frequently asked questions</h1>
+        <p class="sub">Ordering, payment, delivery, verification and promo codes — answered in plain language.
+          Still stuck? Everything at the bottom reaches a human.</p>
+      </div>
+
+      <div class="faq-tools">
+        <div class="faq-search">
+          <svg class="ic" aria-hidden="true"><use href="#i-search"></use></svg>
+          <label class="visually-hidden" for="faqSearch">Search the FAQs</label>
+          <input class="input" id="faqSearch" type="search" placeholder="Search a question — e.g. delivery fee, promo, refund…" autocomplete="off">
+        </div>
+        <span class="faq-count" id="faqCount" role="status"></span>
+      </div>
+
+      <nav class="faq-jump" aria-label="FAQ topics">
+        <a href="#ordering"><svg class="ic" aria-hidden="true"><use href="#i-bag"></use></svg>Ordering</a>
+        <a href="#payment"><svg class="ic" aria-hidden="true"><use href="#i-wallet"></use></svg>Payment</a>
+        <a href="#delivery"><svg class="ic" aria-hidden="true"><use href="#i-truck"></use></svg>Delivery</a>
+        <a href="#account"><svg class="ic" aria-hidden="true"><use href="#i-shield"></use></svg>Account &amp; verification</a>
+        <a href="#promos"><svg class="ic" aria-hidden="true"><use href="#i-tag"></use></svg>Promo codes</a>
+        <a href="#reviews"><svg class="ic" aria-hidden="true"><use href="#i-star"></use></svg>Reviews</a>
+      </nav>
+
+      <div class="faq-layout">
+        <div>
+          <section class="faq-group" id="ordering" aria-labelledby="h-ordering">
+            <h2 id="h-ordering"><svg class="ic" aria-hidden="true"><use href="#i-bag"></use></svg>Ordering &amp; your cart</h2>
+
+            <details class="faq-item" id="how-to-order">
+              <summary>How do I place an order?<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <p>Four steps: pick your food, review the cart, fill in checkout, choose how to pay.</p>
+                <ul>
+                  <li>Browse the <b>menu</b>, tap any dish, then <b>Add to cart</b> (the + button on a card works too).</li>
+                  <li>Open the <b>cart</b> to change quantities, add a delivery note or drop a promo code.</li>
+                  <li>At <b>checkout</b> confirm your delivery details and pick a payment method.</li>
+                  <li>Place the order — you land on a confirmation page with an order number and an ETA.</li>
+                </ul>
+                <p>You need to be signed in and have a confirmed email before the order can go through.</p>
+                <div class="faq-links"><a class="btn btn-primary btn-sm" href="menu.html">Browse the menu</a></div>
+              </div>
+            </details>
+
+            <details class="faq-item" id="need-account">
+              <summary>Do I need an account just to look around?<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <p>No. The <b>homepage, full menu, dish pages, search and this help area</b> are open to everyone — no sign-in, no gate.
+                  You only need an account at the point of ordering, and signing out simply returns you to the public homepage.</p>
+              </div>
+            </details>
+
+            <details class="faq-item" id="order-tracking">
+              <summary>What happens after I place an order?<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <p>Every order moves through the same five stages: <b>Pending → Confirmed → Preparing → Out for delivery → Delivered</b>.
+                  The kitchen team moves an order along from the admin console, and your <b>tracking page</b> updates the moment it does —
+                  including a small on-screen toast if you are browsing somewhere else on DishDash.</p>
+                <div class="faq-links"><a class="btn btn-outline btn-sm" href="orders.html">See my orders</a></div>
+              </div>
+            </details>
+
+            <details class="faq-item" id="cancel-order">
+              <summary>Can I cancel an order?<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <p>Yes, while the order is still <b>Pending</b> — nothing has been cooked and no rider has left, so it can be stopped cleanly.
+                  Cancel from the tracking page or from the order details in <b>My orders</b>; you can add a reason (optional) so the team knows why.</p>
+                <p>After that, the kitchen can still <b>refuse</b> an order up to the moment it is delivered. Either way the order shows a red
+                  <b>Cancelled</b> state in your history with the reason and who called it off — it never silently disappears.</p>
+                <p>Cancelled orders stop counting towards revenue and statistics, and any promo code they had spent is handed back to your account.</p>
+              </div>
+            </details>
+
+            <details class="faq-item" id="minimum-order">
+              <summary>Is there a minimum order?<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <p>No minimum. There is a flat delivery fee of <b>₦1,200</b>, and it becomes <b>free on orders of ₦20,000 or more</b> —
+                  the cart shows a progress bar so you can see how close you are.</p>
+              </div>
+            </details>
+          </section>
+
+          <section class="faq-group" id="payment" aria-labelledby="h-payment">
+            <h2 id="h-payment"><svg class="ic" aria-hidden="true"><use href="#i-wallet"></use></svg>Payment</h2>
+
+            <details class="faq-item" id="pay-methods">
+              <summary>Which payment methods can I use?<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <ul>
+                  <li><b>Card</b> — Visa, Mastercard or Verve, entered into an on-screen demo card.</li>
+                  <li><b>Cash on delivery</b> — pay the rider when the food arrives.</li>
+                  <li><b>Bank transfer</b> — transfer to the demo account shown and the team confirms it.</li>
+                </ul>
+              </div>
+            </details>
+
+            <details class="faq-item" id="real-money">
+              <summary>Will my card really be charged?<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <p><b>No.</b> DishDash is an academic demo project: every payment method is simulated, no card details are stored or sent anywhere,
+                  and the "Demo Trust Bank" account is fictional. No real money moves — ever. That is why the footer carries the
+                  "payments are simulated" note.</p>
+              </div>
+            </details>
+
+            <details class="faq-item" id="awaiting-verification">
+              <summary>What does "Awaiting verification" mean on my order?<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <p>Payment status is tracked separately from order status. For a <b>transfer</b> or <b>cash on delivery</b> order the money
+                  has not been confirmed yet, so it sits at <i>Awaiting verification</i> until the team confirms it from the admin console —
+                  at which point it flips to <b>Paid</b>. Card orders are marked paid immediately (the gateway is simulated).</p>
+              </div>
+            </details>
+
+            <details class="faq-item" id="account-verification">
+              <summary>How does the bank-account check work at checkout?<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <p>Pick your bank, type the <b>10-digit NUBAN</b> account number, and DishDash runs a name enquiry. The account holder's name
+                  comes back and is shown to you as the paying account. You cannot finalise a transfer order until a name has been resolved —
+                  which mirrors how real Nigerian checkout flows behave.</p>
+                <p>Because this is a demo, the name enquiry falls back to a built-in resolver with sample accounts when no live provider key is
+                  configured. That fallback is what the seeded test accounts use.</p>
+              </div>
+            </details>
+          </section>
+
+          <section class="faq-group" id="delivery" aria-labelledby="h-delivery">
+            <h2 id="h-delivery"><svg class="ic" aria-hidden="true"><use href="#i-truck"></use></svg>Delivery</h2>
+
+            <details class="faq-item" id="how-long">
+              <summary>How long does delivery take?<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <p>Around <b>35 minutes</b> on average. Your confirmation page and tracking page show a concrete clock time —
+                  "by 14:05", not a vague estimate — and it is recalculated from the moment the order was placed.</p>
+              </div>
+            </details>
+
+            <details class="faq-item" id="delivery-fee">
+              <summary>What does delivery cost?<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <p><b>₦1,200</b> flat, and <b>free</b> once your food subtotal reaches <b>₦20,000</b>. The cart meter tells you exactly how much
+                  more is needed to unlock free delivery, and the fee appears as <code>FREE</code> in the totals and on your receipt.</p>
+              </div>
+            </details>
+
+            <details class="faq-item" id="delivery-area">
+              <summary>Where do you deliver?<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <p>Lagos, city-wide — that is the coverage the demo is built around. Your address is remembered after each order so the next
+                  checkout is faster, and you can leave a delivery note (gate code, "ring twice", and so on) that the rider sees.</p>
+              </div>
+            </details>
+          </section>
+
+          <section class="faq-group" id="account" aria-labelledby="h-account">
+            <h2 id="h-account"><svg class="ic" aria-hidden="true"><use href="#i-shield"></use></svg>Account &amp; verification</h2>
+
+            <details class="faq-item" id="why-verify">
+              <summary>Why must I confirm my email before ordering?<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <p>Confirmation proves the address on the account is real. You can browse, favourite and fill your cart freely while
+                  unconfirmed — the gate is only at the moment an order is finalised, so nothing is lost while you sort it out.</p>
+                <p>We send a <b>6-digit code</b> (and a confirmation link). The code is valid for <b>10 minutes</b>, five wrong guesses retire it,
+                  and a fresh code can be requested after a short cooldown.</p>
+                <div class="faq-links"><a class="btn btn-outline btn-sm" href="verify.html">Verify my email</a></div>
+              </div>
+            </details>
+
+            <details class="faq-item" id="no-code">
+              <summary>I never received the confirmation code.<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <ul>
+                  <li>Give it a minute or two, then check the spam or promotions folder.</li>
+                  <li>Make sure you typed the address correctly when registering.</li>
+                  <li>Request a new code — the previous one stops working once a fresh one is issued, and there is a short wait between requests.</li>
+                </ul>
+                <p>The confirmation link in the email signs you straight in; if it has expired, request a new code and use the six digits instead.</p>
+              </div>
+            </details>
+
+            <details class="faq-item" id="phone-format">
+              <summary>Which phone numbers do you accept?<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <p>Nigerian mobile numbers only, and always the full <b>11 digits</b> — written with or without spaces, e.g.
+                  <code>0803 412 7788</code>. Accepted prefixes are <code>070</code>, <code>080</code>, <code>081</code>, <code>090</code>
+                  and <code>091</code>. Anything shorter, longer or starting differently is rejected with an inline explanation on the field —
+                  so a typo is caught before an order is placed.</p>
+              </div>
+            </details>
+
+            <details class="faq-item" id="forgot-password">
+              <summary>I forgot my password.<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <p>This prototype has no password-reset email flow yet, so the quickest route is a fresh account with an email you can open,
+                  or one of the seeded demo accounts that ship with the project for exactly this purpose.</p>
+                <p>Also worth knowing: in offline demo mode passwords live only in this browser's local storage — the sign-in page warns you,
+                  so please don't reuse a real password here.</p>
+              </div>
+            </details>
+          </section>
+
+          <section class="faq-group" id="promos" aria-labelledby="h-promos">
+            <h2 id="h-promos"><svg class="ic" aria-hidden="true"><use href="#i-tag"></use></svg>Promo codes &amp; refunds</h2>
+
+            <details class="faq-item" id="promo-codes">
+              <summary>What promo codes exist, and how often can I use them?<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <ul>
+                  <li><code>DISHWELCOME</code> — <b>₦1,500 off</b>, first order only, and <b>one time per account</b>.</li>
+                  <li><code>FAST10</code> — <b>10% off</b> orders over ₦5,000, and reusable as often as you like.</li>
+                </ul>
+                <p>A code is spent at the moment the order is <b>placed</b>, not when you type it — so experimenting at checkout costs you nothing.
+                  If you cancel the order that used it, the code comes back.</p>
+                <p>The cart and checkout hint tell you the truth up front: a code you have already used shows as struck through with
+                  "already used on this account". Apply it there and the discount appears in the totals and on your receipt.</p>
+                <div class="faq-links"><a class="btn btn-outline btn-sm" href="cart.html">Open my cart</a></div>
+              </div>
+            </details>
+
+            <details class="faq-item" id="refunds">
+              <summary>How do refunds work?<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <p>Since no real payment ever happens, there is nothing to refund: cancelling an order simply removes it from the books —
+                  cancelled orders are excluded from revenue, order counts and average order value — and releases its promo code.</p>
+                <p>In a real deployment this is where an actual refund window and payment-provider flow would slot in.</p>
+              </div>
+            </details>
+          </section>
+
+          <section class="faq-group" id="reviews" aria-labelledby="h-reviews">
+            <h2 id="h-reviews"><svg class="ic" aria-hidden="true"><use href="#i-star"></use></svg>Reviews &amp; feedback</h2>
+
+            <details class="faq-item" id="write-review">
+              <summary>How do I leave a review?<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <p>Open any dish page while signed in and use the review panel — stars, an optional headline and a comment. One review per
+                  dish per account, and you can edit or delete your own later.</p>
+                <p>Reviews feed the rating chip on every dish card straight away, so a new review is visible on the menu without a refresh.</p>
+              </div>
+            </details>
+
+            <details class="faq-item" id="verified-badge">
+              <summary>What is the "Verified order" badge on a review?<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <p>It means the reviewer has actually received that dish: we check your order history for a <b>delivered</b> order containing it.
+                  Where an admin can see the difference, reviews without that badge are clearly marked as unverified opinions.</p>
+              </div>
+            </details>
+
+            <details class="faq-item" id="report-problem">
+              <summary>Something went wrong — how do I tell you?<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
+              <div class="faq-a">
+                <p>Use the <b>"Tell us how we're doing"</b> button in the footer of any page, or call and email us — the details are in the
+                  "Still stuck?" panel on this page and in the footer of every page.</p>
+                <p>If it is about a live order, have the order number to hand (it looks like <code>DD-1014</code>); that lets us find it instantly.</p>
+              </div>
+            </details>
+          </section>
+
+          <p class="faq-empty" id="faqEmpty" hidden>No question matches <b id="faqEmptyTerm"></b> — try a simpler word, or ask us directly below.</p>
+        </div>
+
+        <aside class="faq-side">
+          <div class="faq-card" id="still-stuck">
+            <h3>Still stuck?</h3>
+            <p>Talk to a person on the DishDash support desk — no scripts, no hold music.</p>
+            <ul class="faq-contact" id="faqContact"></ul>
+            <button type="button" class="btn btn-primary btn-block" data-feedback>Tell us how we're doing</button>
+          </div>
+
+          <div class="faq-card faq-quick">
+            <h3>Popular answers</h3>
+            <a href="#delivery-fee"><svg class="ic" aria-hidden="true"><use href="#i-truck"></use></svg>Delivery fee &amp; free delivery</a>
+            <a href="#how-to-order"><svg class="ic" aria-hidden="true"><use href="#i-bag"></use></svg>How to place an order</a>
+            <a href="#promo-codes"><svg class="ic" aria-hidden="true"><use href="#i-tag"></use></svg>Promo codes</a>
+            <a href="#cancel-order"><svg class="ic" aria-hidden="true"><use href="#i-x"></use></svg>Cancelling an order</a>
+            <a href="terms.html"><svg class="ic" aria-hidden="true"><use href="#i-shield"></use></svg>Terms &amp; conditions</a>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </main>
+
+  <div id="ddFooter"></div>
+
+  <script src="assets/js/vendor/jquery-3.7.1.min.js"></script>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/supabase-config.js"></script>
+  <script src="assets/js/vendor/supabase.js"></script>
+  <script src="assets/js/store.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script src="assets/js/pages/faq.js"></script>
+</body>
+</html>

@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terms &amp; conditions — DishDash</title>
+  <meta name="description" content="DishDash terms and conditions — how the demo works, what is simulated, and what you agree to when you use the site.">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body data-page="terms">
+  <div id="ddHeader"></div>
+
+  <main id="appMain" class="skip-target">
+    <div class="container">
+      <div class="page-head">
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <a href="index.html">Home</a>
+          <svg class="ic" aria-hidden="true"><use href="#i-chev-r"></use></svg>
+          <span aria-current="page">Terms &amp; conditions</span>
+        </nav>
+        <h1>Terms &amp; conditions</h1>
+        <p class="sub">The ground rules for using DishDash — what the demo really does, what it only pretends to do, and what we expect from you.</p>
+      </div>
+
+      <div class="legal-head">
+        <svg class="ic" aria-hidden="true"><use href="#i-shield"></use></svg>
+        <div class="lh-txt">
+          <b>DishDash — academic demo project</b>
+          <span>Version 1.0 · last updated 18 September 2026</span>
+        </div>
+        <span class="badge badge-warn">Payments simulated</span>
+      </div>
+
+      <div class="legal-layout">
+        <nav class="legal-nav" id="legalNav" aria-label="Sections of this document">
+          <h2>On this page</h2>
+          <a href="#about">1. About these terms</a>
+          <a href="#demo-limits">2. What is real and what is simulated</a>
+          <a href="#accounts">3. Accounts &amp; verification</a>
+          <a href="#orders">4. Orders, prices &amp; availability</a>
+          <a href="#payment">5. Payment terms</a>
+          <a href="#delivery">6. Delivery</a>
+          <a href="#cancellations">7. Cancellations &amp; promo codes</a>
+          <a href="#reviews">8. Reviews &amp; feedback</a>
+          <a href="#acceptable-use">9. Acceptable use</a>
+          <a href="#privacy">10. Privacy &amp; your data</a>
+          <a href="#liability">11. Disclaimer &amp; liability</a>
+          <a href="#changes">12. Changes to these terms</a>
+          <a href="#contact">13. Contact</a>
+        </nav>
+
+        <article class="legal-body" id="legalBody">
+          <p class="legal-note">
+            <svg class="ic" aria-hidden="true"><use href="#i-info"></use></svg>
+            <span><b>Please read this first:</b> DishDash is a student/academic software project built to demonstrate a food-ordering
+            experience. No real restaurant, rider or payment gateway is involved. Every payment is simulated, no card is charged, and no
+            food will be delivered. Nothing here creates a commercial contract for real goods or services.</span>
+          </p>
+
+          <h2 id="about">1. About these terms</h2>
+          <p>These terms describe the agreement between you and the DishDash demo ("DishDash", "we", "the site") when you browse, register
+            or place an order. By using the site you accept them. If you do not accept them, please use the public pages only — or not at all.</p>
+          <p>DishDash exists to demonstrate software engineering: a multi-page storefront, an order lifecycle, a simulated payment stack and a
+            separate admin console. It is <b>not</b> a live commercial service and should not be treated as one.</p>
+
+          <h2 id="demo-limits">2. What is real and what is simulated</h2>
+          <p>Being honest about this is the most important part of this document. Here is the split:</p>
+          <table class="legal-table">
+            <thead>
+              <tr><th>Feature</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Accounts, sign-in and email confirmation</td><td><b>Real</b> — accounts work, and the confirmation code is genuinely sent when the cloud backend is connected. Seeded demo accounts are marked as already confirmed.</td></tr>
+              <tr><td>Menu, dishes, prices, cart and order history</td><td><b>Real</b> — the data behaves like a working shop and persists between visits.</td></tr>
+              <tr><td>Order lifecycle and tracking</td><td><b>Real mechanics, demo operator</b> — an admin (not a real kitchen) moves each order through its stages.</td></tr>
+              <tr><td>Card payment</td><td><b>Simulated</b> — a demo card form validates format only. No card number, CVV or expiry is ever sent, stored or charged.</td></tr>
+              <tr><td>Bank transfer &amp; account name enquiry</td><td><b>Simulated</b> — the "Demo Trust Bank" account is fictional and the name check falls back to a built-in sample resolver. A real provider can only be wired up by the operator with their own key.</td></tr>
+              <tr><td>Cash on delivery</td><td><b>Simulated</b> — nobody collects anything, and admin-side confirmation is a training step, not a till.</td></tr>
+              <tr><td>Delivery, riders and ETAs</td><td><b>Simulated</b> — times shown are modelled estimates. No rider is dispatched and no food arrives.</td></tr>
+              <tr><td>Reviews, ratings and admin analytics</td><td><b>Demo data mixed with real entries</b> — the seeded menu and some reviews ship with the project; orders and reviews you create are genuinely yours within the demo.</td></tr>
+            </tbody>
+          </table>
+
+          <h2 id="accounts">3. Accounts &amp; verification</h2>
+          <p>You need an account to place an order; browsing the homepage, menu and dish pages is free and does not require one.</p>
+          <ul>
+            <li>Give accurate details. Your email address must be one you can open, because ordering is unlocked only after confirmation.</li>
+            <li>Phone numbers must be valid Nigerian mobile numbers in the accepted format — 11 digits beginning <b>070, 080, 081, 090 or 091</b>.</li>
+            <li>Keep your sign-in to yourself. Anything done through your account is treated as done by you for the purposes of the demo.</li>
+            <li><b>Do not reuse a password you use anywhere else.</b> In offline mode account records (including passwords) are kept in
+              this browser's local storage rather than on a hardened server. Use a throwaway password.</li>
+            <li>The seeded demo accounts that ship with the project exist so the demo can be shown quickly; they are shared, public
+              credentials and carry no privacy expectation.</li>
+          </ul>
+          <p>We may suspend or clear an account that is used to abuse the site, spam reviews or disrupt the demo.</p>
+
+          <h2 id="orders">4. Orders, prices &amp; availability</h2>
+          <ul>
+            <li>Prices are shown in Nigerian Naira (₦) and cover the food only. A flat delivery fee of <b>₦1,200</b> applies, and becomes
+              <b>free on subtotals of ₦20,000 or more</b>.</li>
+            <li>Dishes can be marked unavailable or sold out by the operator; an order will not be accepted for an unavailable dish.</li>
+            <li>An order is a request, not a guarantee of food: it begins as <b>Pending</b> and is confirmed by the demo operator.</li>
+            <li>Order totals, promo discounts and receipts are calculated by the app and shown to you before you confirm — that figure is
+              what the demo records.</li>
+          </ul>
+
+          <h2 id="payment">5. Payment terms</h2>
+          <p><b>No money ever changes hands.</b> Every payment method on DishDash is a simulation built for study and demonstration.</p>
+          <ul>
+            <li>Do not enter real card details. If you do, understand that they are not transmitted or stored by the app — but you should
+              still only use made-up numbers, as you would for any public demo.</li>
+            <li>"Awaiting verification" means the operator has not yet confirmed the simulated payment; "Paid" means they have.</li>
+            <li>Bank-transfer details shown at checkout are fictional. Transfers to them will not reach anyone.</li>
+            <li>The operator may edit or delete demo orders at any time to keep the demonstration in a sensible state.</li>
+          </ul>
+
+          <h2 id="delivery">6. Delivery</h2>
+          <p>Delivery is modelled for Lagos, city-wide. The site displays an estimated arrival — typically about 35 minutes from placement —
+            and updates it as the order advances. These are illustrative estimates only: no rider is dispatched, no route is calculated and
+            nothing will be delivered to your address. Delivery notes you type are stored on the order so the demo can show how special
+            instructions travel with an order.</p>
+
+          <h2 id="cancellations">7. Cancellations &amp; promo codes</h2>
+          <ul>
+            <li>You may cancel an order while it is still <b>Pending</b>, from the tracking page or from order details, optionally
+              leaving a reason.</li>
+            <li>The operator may refuse an order at any point before delivery.</li>
+            <li>Cancelled orders are shown as cancelled with the reason and the person who called it off. They are excluded from revenue and
+              statistics, and the order cannot be revived.</li>
+            <li>Promo codes are spent when an order is <b>placed</b>. <code>DISHWELCOME</code> (₦1,500 off) is limited to one redemption per
+              account and to a first order; <code>FAST10</code> (10% off orders over ₦5,000) is reusable. Cancelling the order that used a
+              code releases it back to your account.</li>
+            <li>Since no payment is real, refunds do not arise — a cancelled order is simply removed from the books.</li>
+          </ul>
+
+          <h2 id="reviews">8. Reviews &amp; feedback</h2>
+          <p>Signed-in customers may review a dish once per account, and may edit or delete their own review at any time. Reviews you submit
+            are visible to other visitors and to the admin console.</p>
+          <ul>
+            <li>Keep reviews about the food, the service and your experience — not about other people.</li>
+            <li>Do not post anything unlawful, hateful, defamatory, spammy or containing personal data about someone else.</li>
+            <li>The "Verified order" badge means the reviewer has a delivered order containing that dish. It is not a guarantee of the
+              reviewer's independence or honesty.</li>
+            <li>We may hide or delete reviews that break these rules, and may remove a review from an account that is abusing the feature.</li>
+            <li>Feedback sent through "Tell us how we're doing" is treated as project feedback and may be used to improve the demo.</li>
+          </ul>
+
+          <h2 id="acceptable-use">9. Acceptable use</h2>
+          <p>Please use the site as intended. In particular, do not:</p>
+          <ul>
+            <li>attempt to break, bypass or probe the sign-in, admin or verification controls;</li>
+            <li>scrape the site, automate bulk ordering or flood it with requests;</li>
+            <li>impersonate another person, or register accounts with someone else's email address;</li>
+            <li>upload or place unlawful, harmful or misleading content anywhere in the app;</li>
+            <li>use the demo to mislead anyone into believing real food, delivery or payments are on offer.</li>
+          </ul>
+
+          <h2 id="privacy">10. Privacy &amp; your data</h2>
+          <p>DishDash stores as little as it can get away with, because it is a teaching project:</p>
+          <ul>
+            <li><b>On the account:</b> the name, email, phone number and delivery address you provide, plus your cart, favourites, orders
+              and reviews.</li>
+            <li><b>Offline mode</b> keeps all of that in this browser's local storage. It never leaves your device, and clearing site data
+              removes it permanently.</li>
+            <li><b>Cloud mode</b> (when the operator has connected a Supabase backend) stores the same records in the project's database so
+              accounts work across browsers and devices, with sign-in sessions held by Supabase Auth and row-level security rules limiting
+              who can read what.</li>
+            <li><b>Never stored anywhere:</b> card numbers, CVV codes, expiry dates, and real bank account credentials. The account number
+              used for the transfer name-enquiry is validated and used for that check only.</li>
+            <li><b>Deletion:</b> clearing browser storage removes your offline demo data. In cloud mode, ask the operator to remove an
+              account or its records. As a demonstration project, no formal retention schedule applies.</li>
+            <li>There are no advertising trackers, no third-party analytics scripts and no marketing email in this project.</li>
+          </ul>
+
+          <h2 id="liability">11. Disclaimer &amp; liability</h2>
+          <p>The site is provided <b>"as is"</b> and <b>"as available"</b>, without warranties of any kind — express or implied — including
+            fitness for a particular purpose, availability, accuracy of menu data, or that any feature will be free of interruption or error.</p>
+          <p>To the fullest extent permitted by law, the project authors and their institution are not liable for any loss, cost or damage
+            arising from your use of this demo, from any simulated transaction, from reliance on an estimated delivery time, or from data
+            you chose to enter into it. Do not rely on DishDash for real ordering, payment or delivery of anything.</p>
+
+          <h2 id="changes">12. Changes to these terms</h2>
+          <p>These terms can change as the project develops — features are added, and the demo's behaviour may move. The version and
+            "last updated" date at the top of this page always reflect the current wording. Continuing to use the site after a change means
+            you accept the updated terms. Where a change affects an external demo account, the operator should note it there too.</p>
+
+          <h2 id="contact">13. Contact</h2>
+          <p>Questions about these terms, the project or the data it holds can go to the DishDash support desk:</p>
+          <ul>
+            <li>Phone: <b id="tcPhone">+234 700 000 4747</b> — Monday to Sunday, 9am–10pm (WAT)</li>
+            <li>Email: <b id="tcEmail">hello@dishdash.ng</b></li>
+            <li>Address: Lagos, Nigeria — the demo delivers city-wide</li>
+          </ul>
+          <p>For anything about how ordering actually behaves day to day, the <a href="faq.html">FAQs</a> answer most of it.</p>
+
+          <div class="legal-foot">
+            <span>© <span id="legalYear">2026</span> DishDash · Good food. Fast delivery.</span>
+            <span>Demo project — payments are simulated. No real charges.</span>
+          </div>
+        </article>
+      </div>
+    </div>
+  </main>
+
+  <div id="ddFooter"></div>
+
+  <script src="assets/js/vendor/jquery-3.7.1.min.js"></script>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/supabase-config.js"></script>
+  <script src="assets/js/vendor/supabase.js"></script>
+  <script src="assets/js/store.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script src="assets/js/pages/terms.js"></script>
+</body>
+</html>
