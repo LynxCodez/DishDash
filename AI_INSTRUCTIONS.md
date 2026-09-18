@@ -84,15 +84,18 @@ There is no `npm test`. The established verification pattern is:
      `install()` re-assigns `currentUser` when the cloud adapter mounts, so a
      stub applied earlier is silently overwritten. Real verify.js, real code
      path, no database writes.
-10. **When the preview webview stops compositing, it also stops telling the
-   truth.** `preview_screenshot` fails with "produced no frames", and
-   **computed-style reads can be wrong**: `background-clip` reported
-   `border-box` for a gradient-text rule *and* for a throwaway inline probe on
-   the same page, while `CSS.supports('background-clip','text')` was `true`.
-   So do not conclude "my CSS regressed" from one computed value — cross-check
-   against a control probe (a fresh element with the declaration inline) and
-   read only properties the freeze cannot fake (class names, geometry, text
-   content, the store). Structural assertions beat a screenshot you cannot get.
+10. **Believe computed styles when they surprise you — and check your own
+   probe first.** On 2026-09-17 `getComputedStyle(grad).backgroundClip` read
+   `border-box` for a gradient-text rule while `CSS.supports` said `text` was
+   supported, so it was written off here as a webview artifact. It was NOT: a
+   later rule was using the `background` shorthand and resetting the clip, and
+   the "control probe" written to confirm that was itself invalid because it
+   also put `background:` after the clip longhands. The next day the same
+   webview read `text` correctly once the offending rule was deleted. **Lesson:
+   a surprising computed value means "find the rule that wins the cascade", not
+   "the tool is lying" — and a control probe is only a control if it is correct.**
+   (`preview_screenshot` failing with "produced no frames" is a genuine
+   webview-freeze symptom; that one is the tool.)
 11. **Proving an RLS-dependent mutation needs a real write — make it a
    disposable one.** The rule is still "don't leave data behind", not
    "never write": what caught the customer-cancellation bug was placing a
@@ -337,16 +340,28 @@ curl-checked for HTTP 200 BEFORE being committed (a dead Unsplash ID just
 silently shows nothing). If all photos fail, the hero degrades to the plain
 cream gradient — by design, do not "fix" that with a placeholder photo.
 
-**Hero cinematic variant.** `.hero.is-cinematic` (section 9b in style.css) is a
-**hero-only** treatment — do not grow it into a site-wide theme; the rest of
-the site is a cream design system and the dark band works precisely because
-the 58% fade melts into it. `home.js` applies it BEFORE `init()` and never on
-a timer, because the script sits at the end of `<body>` after the hero markup
-and the class must land before first paint (otherwise a dark-OS visitor sees a
-cream flash). Default = stored choice, else `prefers-color-scheme: dark`. The
-toggle handler flips **what is currently showing**, never the stored value —
-deciding from storage makes the first click contradict the button's own label
-whenever the visible state came from the OS preference.
+**The hero is single-column and bright-only.** `.hero-inner` is a block
+(max-width 720px) holding `.hero-copy` alone, over the photo backdrop. The
+right-hand photo collage (`.hm-main` / `.hm-f1` / `.hm-f2`), the floating stat
+chips (`.float-chip`) and the `@keyframes floaty`/`spin` they used were all
+REMOVED on the owner's request on 2026-09-18; "Free delivery on orders above
+₦20,000" now lives in the `.hero-proof` row as a fourth `.proof` item. Do not
+re-add the collage or those chips. A **dark "cinematic" hero variant**
+(`.hero.is-cinematic`, applied by `home.js` from a stored preference) was also
+built and then **rejected by the owner** — the copy was hard to read — so it
+is gone entirely; the hero is bright-only and `home.js` no longer touches the
+hero's styling at all. If you resurrect any of it from git history, read the
+gradient-text rule below first: the variant's own rules caused a real bug.
+
+**Gradient text must use `background-image`, never the `background` shorthand.**
+`.hero h1 .grad` (and `.auth-brand h1 .grad`) depend on
+`background-clip: text` + `color: transparent`. The `background` SHORTHAND
+resets `background-clip` back to its initial `border-box`, so any later rule
+that writes `background: linear-gradient(...)` on that selector silently turns
+the word into a solid gradient RECTANGLE over invisible text — which is
+exactly what happened to the word "delivered" in the cinematic variant. Use the
+longhand, and if gradient text ever looks like a coloured bar, check for a
+shorthand override before touching anything else.
 
 **Terminal order states are off-flow.** `cancelled` is NOT in
 `DD_DATA.STATUS_FLOW` (that array is the happy path: the tracking timeline
@@ -467,16 +482,19 @@ screen; later pushes reuse the stored credential.
   first-order-only, `FAST10` repeatable, spent on order placement, released on
   cancellation. `promo-schema.sql` is optional (degrades to per-browser
   enforcement). Rules live once in `DD_DATA.checkPromo`; see section 4.
-- **Dark cinematic hero variant**: DONE — hero-only toggle, remembered per
-  browser, OS dark-mode default. Sections 4 + README.
+- **Homepage hero**: DONE — single-column copy over the crossfading photo
+  backdrop, four proof items (35 min / dishes / rating / free delivery). The
+  right-hand collage, the floating stat chips and the dark "cinematic"
+  variant were all **removed at the owner's request on 2026-09-18** after the
+  variant shipped and read poorly. Do not re-add any of them; see section 4 for
+  the gradient-text trap the variant caused.
 - Backlog from an external review, triaged & real (remaining): bulk admin
   actions (advance many orders), push-notification simulation on status change,
   XSS audit (ensure UI.esc on every user-generated render), loading states
   for first cloud fetch. Rejected as stale: print receipt (exists), i18n
-  (owner has not asked). **Dark mode: the owner asked only for a dark HERO
-  VARIANT, not a site-wide theme** — do not "promote" `.hero.is-cinematic`
-  into a full dark mode without being asked; the rest of the site is a cream
-  design system and the hero only reads as cinematic because it melts into it.
+  (owner has not asked). **Dark mode: the owner does not want one.** A hero-only
+  dark variant was offered, built, and rejected as hard to read — so neither a
+  site-wide dark mode nor a dark hero should be built without being asked again.
 - Footer Account column shows "Sign in" even while signed in (`ui.js`,
   header/drawer are session-aware, footer is not).
 - Seed order dates in data.js are anchored to **Date.now()** (not a fixed

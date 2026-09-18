@@ -26,12 +26,6 @@
         <div class="hero-bg-tint"></div>
         <div class="hero-bg-fade"></div>
       </div>
-      <!-- Same hero, shot at night. home.js applies the visitor's remembered
-           choice (OS dark-mode is the default when nothing is stored). -->
-      <button class="hero-variant" type="button" data-hero-variant aria-pressed="false" title="Switch the hero lighting">
-        <svg class="ic" aria-hidden="true"><use href="#i-moon"></use></svg>
-        <span data-hv-label>Cinematic</span>
-      </button>
       <div class="container hero-inner">
         <div class="hero-copy" data-reveal>
           <span class="eyebrow">Good food. Fast delivery.</span>
@@ -61,29 +55,11 @@
               <span class="p-ic" style="color:var(--acc-600)"><svg class="ic" aria-hidden="true"><use href="#i-star"></use></svg></span>
               <span><span class="p-val">4.8 / 5</span><br><span class="p-lab">customer rating</span></span>
             </div>
-          </div>
-        </div>
-        <div class="hero-media" data-reveal>
-          <span class="hm-ring" aria-hidden="true"></span>
-          <div class="hm-main">
-            <span class="img-emoji" aria-hidden="true" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:110px;background:linear-gradient(140deg,#FFEAD8,#F9C7A4)">🍔</span>
-            <img src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=900&q=75" alt="Classic beef burger with melted cheese" loading="eager" onerror="this.remove()">
-          </div>
-          <div class="hm-f1">
-            <span class="img-emoji" aria-hidden="true" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:64px;background:linear-gradient(140deg,#FFEAD8,#F9C7A4)">🍕</span>
-            <img src="https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=600&q=70" alt="Wood-fired margherita pizza" loading="lazy" onerror="this.remove()">
-          </div>
-          <div class="hm-f2">
-            <span class="img-emoji" aria-hidden="true" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:58px;background:linear-gradient(140deg,#FFF3E0,#F5DCC0)">🍗</span>
-            <img src="https://images.unsplash.com/photo-1562967914-608f82629710?auto=format&fit=crop&w=500&q=70" alt="Crispy fried chicken" loading="lazy" onerror="this.remove()">
-          </div>
-          <div class="float-chip fc-a">
-            <span class="fc-ic"><svg class="ic" aria-hidden="true"><use href="#i-truck"></use></svg></span>
-            <span><span class="fc-t1">Free delivery</span><span class="fc-t2">on orders above ₦20,000</span></span>
-          </div>
-          <div class="float-chip fc-b">
-            <span class="fc-ic"><svg class="ic" aria-hidden="true"><use href="#i-check"></use></svg></span>
-            <span><span class="fc-t1">4.8-star rating</span><span class="fc-t2">12,000+ happy customers</span></span>
+            <!-- moved here from the old floating "Free delivery" chip -->
+            <div class="proof">
+              <span class="p-ic" style="color:var(--acc-600)"><svg class="ic" aria-hidden="true"><use href="#i-truck"></use></svg></span>
+              <span><span class="p-val">Free delivery</span><br><span class="p-lab">on orders above ₦20,000</span></span>
+            </div>
           </div>
         </div>
       </div>

@@ -266,9 +266,19 @@ input[type=checkbox].switch:checked::after{left:21px}
   radial-gradient(600px 340px at 12% -10%,rgba(255,132,66,.14),transparent 60%),
   radial-gradient(700px 460px at 100% 8%,rgba(240,100,24,.1),transparent 55%);
   pointer-events:none}
-.hero-inner{position:relative;z-index:2;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+/* The hero is a single column: copy only, over the photo backdrop. Used to be
+   a 2-column grid with a photo collage on the right; the collage and its
+   floating stat chips ("12,000+ happy customers") were removed on request, and
+   the free-delivery fact moved into the .hero-proof row below the CTAs. The
+   copy keeps a max-width so the headline breaks where it always did. */
+.hero-inner{position:relative;z-index:2;display:block;max-width:720px}
 .hero h1{font-size:clamp(2.2rem,4.6vw,3.55rem);letter-spacing:-.035em;line-height:1.08}
-.hero h1 .grad{background:linear-gradient(115deg,var(--brand-600),var(--brand-400));-webkit-background-clip:text;background-clip:text;color:transparent}
+/* Gradient text: use the background-IMAGE longhand, never the `background`
+   shorthand. The shorthand resets background-clip to its initial value, so a
+   later rule that sets `background:linear-gradient(...)` on this selector
+   silently turns the word into a solid gradient RECTANGLE over transparent
+   text — which is exactly the bug this comment exists to prevent. */
+.hero h1 .grad{background-image:linear-gradient(115deg,var(--brand-600),var(--brand-400));-webkit-background-clip:text;background-clip:text;color:transparent}
 .hero .lead{color:var(--ink-2);font-size:clamp(1rem,1.5vw,1.13rem);margin:18px 0 24px;max-width:520px}
 .hero-cta{display:flex;gap:13px;flex-wrap:wrap;margin-top:22px}
 .hero-proof{display:flex;gap:26px;margin-top:34px;flex-wrap:wrap}
@@ -276,69 +286,6 @@ input[type=checkbox].switch:checked::after{left:21px}
 .proof .p-ic{width:38px;height:38px;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;color:var(--brand-600);font-size:1.15rem;box-shadow:var(--sh-sm);border:1px solid var(--line-2)}
 .proof .p-val{font-weight:800;font-size:.98rem;line-height:1.2}
 .proof .p-lab{font-size:.8rem;color:var(--muted)}
-
-/* ---------- 9b. Cinematic hero variant ----------
-   The same hero, shot at night: the backdrop dims toward a deep warm black,
-   the type flips to warm white, and the chrome (search bar, proof chips)
-   turns to glass. Two things make it feel cinematic rather than merely dark:
-   a slow Ken Burns push on whichever slide is showing, and a LONGER bottom
-   fade, so the dark band melts into the cream page instead of ending in a
-   hard line. That melt is what stops the dark hero fighting the rest of the
-   site below it.
-
-   .hero.is-cinematic is applied by home.js from the visitor's stored choice
-   (falling back to the OS dark-mode setting). Only the hero changes — this is
-   a hero variant, not a site theme, so no other page or component is touched.
-   prefers-reduced-motion switches the push off globally (rule 28). */
-.hero-variant{position:absolute;left:18px;bottom:16px;z-index:3;display:inline-flex;align-items:center;gap:8px;
-  font:inherit;font-size:.78rem;font-weight:750;letter-spacing:.03em;padding:8px 15px;border-radius:99px;cursor:pointer;
-  background:rgba(255,255,255,.74);border:1px solid var(--line);color:var(--ink-2);
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:.2s}
-.hero-variant:hover{background:#fff;color:var(--ink);border-color:var(--brand-200)}
-.hero-variant svg{width:1rem;height:1rem;flex:none}
-.hero.is-cinematic{background:#0B0705}
-.hero.is-cinematic .hero-bg-slide{background-position:center 46%;filter:saturate(1.06) contrast(1.06) brightness(.66)}
-.hero.is-cinematic .hero-bg-slide.is-on{animation:heroKenBurns 15s ease-out both}
-@keyframes heroKenBurns{from{transform:scale(1.045)}to{transform:scale(1.13)}}
-.hero.is-cinematic .hero-bg-tint{background:
-  linear-gradient(178deg,rgba(8,5,3,.93) 0%,rgba(8,5,3,.80) 30%,rgba(10,6,3,.48) 58%,rgba(250,246,240,0) 88%)}
-.hero.is-cinematic .hero-bg-fade{height:58%;background:linear-gradient(to bottom,rgba(11,7,5,0) 0%,rgba(11,7,5,.38) 24%,rgba(250,246,240,.62) 68%,var(--bg) 94%)}
-.hero.is-cinematic::before{background:
-  radial-gradient(620px 340px at 10% -12%,rgba(255,138,60,.22),transparent 62%),
-  radial-gradient(760px 480px at 102% 6%,rgba(255,92,20,.15),transparent 58%)}
-.hero.is-cinematic h1{color:#FFF8F2;text-shadow:0 18px 40px rgba(0,0,0,.45)}
-.hero.is-cinematic h1 .grad{background:linear-gradient(115deg,#FFC08A,#FF7A2F)}
-.hero.is-cinematic .lead{color:rgba(255,242,233,.85)}
-.hero.is-cinematic .eyebrow{color:#FFB27A}
-.hero.is-cinematic .searchbar{background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.24);
-  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
-.hero.is-cinematic .searchbar input{color:#FFF8F2}
-.hero.is-cinematic .searchbar input::placeholder{color:rgba(255,246,238,.62)}
-.hero.is-cinematic .btn-dark{background:#fff;color:#1F1611}
-.hero.is-cinematic .btn-ghost{color:#FFF3EA;border:1.5px solid rgba(255,255,255,.3)}
-.hero.is-cinematic .btn-ghost:hover{border-color:rgba(255,255,255,.62);color:#fff}
-.hero.is-cinematic .proof .p-ic{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.22);color:#FFB27A;box-shadow:none}
-.hero.is-cinematic .proof .p-val{color:#FFF8F2}
-.hero.is-cinematic .proof .p-lab{color:rgba(255,246,238,.66)}
-.hero.is-cinematic .hero-variant{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.24);color:#FFF3EA}
-.hero.is-cinematic .hero-variant:hover{background:rgba(255,255,255,.22);color:#fff;border-color:rgba(255,255,255,.42)}
-
-.hero-media{position:relative;min-height:420px}
-.hm-main{position:absolute;right:0;top:8px;width:min(78%,430px);border-radius:28px;overflow:hidden;box-shadow:var(--sh-lg);aspect-ratio:1/1;border:6px solid #fff;rotate:2.5deg;z-index:2;background:var(--bg-soft)}
-.hm-main img,.float-img{width:100%;height:100%;object-fit:cover}
-.hm-f1{position:absolute;left:0;bottom:6px;width:min(46%,250px);aspect-ratio:1/1;border-radius:22px;overflow:hidden;border:6px solid #fff;box-shadow:var(--sh-md);rotate:-6deg;z-index:3}
-.hm-f2{position:absolute;right:4%;bottom:-8px;width:min(40%,215px);aspect-ratio:1/1;border-radius:22px;overflow:hidden;border:6px solid #fff;box-shadow:var(--sh-md);rotate:4deg;z-index:1;opacity:.96}
-.float-chip{position:absolute;z-index:5;background:#fff;border-radius:16px;box-shadow:var(--sh-lg);padding:11px 15px;display:flex;align-items:center;gap:11px;animation:floaty 5.5s ease-in-out infinite}
-.float-chip .fc-ic{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;flex:none}
-.float-chip .fc-t1{font-weight:800;font-size:.9rem;line-height:1.25}
-.float-chip .fc-t2{font-size:.76rem;color:var(--muted)}
-.fc-a{top:2px;left:-4px;animation-delay:.6s}
-.fc-b{bottom:58px;right:-6px;animation-delay:1.8s}
-.fc-a .fc-ic{background:var(--acc-50);color:var(--acc-600)}
-.fc-b .fc-ic{background:var(--brand-50);color:var(--brand-600)}
-@keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
-.hm-ring{position:absolute;width:190px;height:190px;border:2px dashed var(--brand-200);border-radius:50%;right:-30px;top:-34px;animation:spin 26s linear infinite;z-index:0}
-@keyframes spin{to{transform:rotate(360deg)}}
 
 /* ---------- 10. Category tiles ---------- */
 .cat-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:14px}
@@ -744,7 +691,7 @@ input[type=checkbox].switch:checked::after{left:21px}
 .auth-brand .logo{color:#fff}
 .auth-brand .logo-text em{background:linear-gradient(120deg,#FFB084,#FF7A3D);-webkit-background-clip:text;background-clip:text;color:transparent}
 .auth-brand h1{color:#fff;font-size:clamp(1.9rem,3.6vw,2.7rem);letter-spacing:-.03em;margin:30px 0 14px}
-.auth-brand h1 .grad{background:linear-gradient(120deg,#FFB084,#FF7A3D);-webkit-background-clip:text;background-clip:text;color:transparent}
+.auth-brand h1 .grad{background-image:linear-gradient(120deg,#FFB084,#FF7A3D);-webkit-background-clip:text;background-clip:text;color:transparent}
 .auth-brand p{color:#E7D5C4;font-size:1.02rem;max-width:400px}
 .auth-quote{margin-top:44px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.13);border-radius:18px;padding:18px 20px;backdrop-filter:blur(4px)}
 .auth-quote .stars{margin-bottom:8px}
@@ -837,15 +784,10 @@ input[type=checkbox].switch:checked::after{left:21px}
   .f-grid{grid-template-columns:1fr 1fr;gap:34px}
 }
 @media (max-width:1020px){
-  .hero-inner{grid-template-columns:1fr;gap:44px}
+  /* the copy is the only hero column, so on small screens it takes the full
+     width and the wash becomes an even top→bottom ramp (a left→right ramp
+     would leave dark text sitting on a bright patch of photo) */
   .hero-bg-tint{background:linear-gradient(180deg,rgba(250,246,240,.93) 0%,rgba(250,246,240,.80) 100%)}
-  /* text spans the full width on small screens, so the wash has to be even
-     rather than a left-to-right ramp — the dark variant needs a heavier even
-     wash or the white headline can land on a bright patch of photo */
-  .hero.is-cinematic .hero-bg-tint{background:linear-gradient(180deg,rgba(8,5,3,.90) 0%,rgba(8,5,3,.86) 52%,rgba(10,6,3,.55) 82%,rgba(250,246,240,0) 100%)}
-  .hero.is-cinematic .hero-bg-fade{height:46%}
-  .hero-variant{left:14px;bottom:12px;padding:7px 13px;font-size:.74rem}
-  .hero-media{min-height:380px;max-width:560px;margin:0 auto;width:100%}
   .testi-grid{grid-template-columns:1fr;max-width:520px}
   .detail-layout{grid-template-columns:1fr}
   .detail-media{max-width:620px;aspect-ratio:1/.95}
@@ -873,7 +815,6 @@ input[type=checkbox].switch:checked::after{left:21px}
   .ci-img{width:82px;height:82px}
   .ci-side{flex-direction:row;align-items:center;justify-content:space-between;grid-column:1/-1;padding-top:10px;border-top:1px dashed var(--line-2)}
   .form-2col{grid-template-columns:1fr}
-  .hero-media{min-height:330px}
   .cart-fab{right:12px;bottom:12px;padding:12px 16px}
   .features-grid{grid-template-columns:1fr 1fr;gap:12px}
   .feature{padding:20px 16px}
@@ -884,10 +825,6 @@ input[type=checkbox].switch:checked::after{left:21px}
 @media (max-width:480px){
   .cat-grid{grid-template-columns:repeat(4,1fr)}
   .cat-card .c-name{font-size:.72rem}
-  .hero-media{min-height:270px}
-  .hm-main{width:74%}
-  .hm-f1{width:44%}
-  .hm-f2{display:none}
   .demo-quick{grid-template-columns:1fr}
   .toolbar{top:64px}
   .site-header .nav-inner{height:64px}

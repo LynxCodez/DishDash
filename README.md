@@ -334,6 +334,15 @@ table — Unsplash IDs verified live before shipping) that **crossfade every
   right, echoing the darkened-hero pattern of the reference sites but in
   DishDash's palette. Below 1020 px the text spans full width, so the tint
   switches to a stronger uniform top→bottom wash.
+- `.hero-inner` — a **single column**: the copy only, capped at 720 px, with
+  the photo backdrop breathing to its right. It used to be a 2-column grid
+  with a photo collage (burger / pizza / chicken cards) and two floating
+  stat chips on the right; that whole right-hand block was **removed on
+  request** — the collage said nothing the images above and below don't
+  already say, and the chips over-claimed (“12,000+ happy customers”). The
+  one fact worth keeping, free delivery over ₦20,000, now sits in the
+  `.hero-proof` row as a fourth proof item alongside 35 min / 26+ dishes /
+  4.8 rating.
 - `.hero-bg-fade` — the bottom 44% of the hero is a transparent→`--bg`
   gradient, so scrolling past the photo never meets a hard edge.
 
@@ -345,26 +354,24 @@ the foods-broadcast re-init can't stack intervals; ticks are skipped while
 the tab is hidden; and the global `prefers-reduced-motion` rule already
 flattens all transitions, so no motion runs for those users. If Unsplash is
 unreachable the slides are transparent and the hero degrades to the original
-cream look — the emoji fallbacks in the foreground collage are untouched.
+cream look.
 
-### Cinematic variant (the same hero, shot at night)
+### Gradient headline word
 
-A button in the bottom-left of the hero switches between the bright classic
-look above and a **dark cinematic** one: the photo dims toward a deep warm
-black, the headline flips to warm white, the search bar and proof chips turn
-to glass, and the bottom fade grows to 58% so the dark band still melts into
-the cream page instead of ending in a hard line. The crossfade also gains a
-slow Ken Burns push (15 s, `heroKenBurns`) on whichever slide is showing.
+The word “delivered” in the `<h1>` uses gradient **text** (`.hero h1 .grad`),
+which depends on `background-clip: text`. The rule therefore sets
+`background-image` — the **longhand** — and never the `background` shorthand,
+because the shorthand resets `background-clip` to `border-box` and turns the
+word into a solid gradient rectangle over invisible text. A “dark cinematic”
+hero variant briefly existed here and did exactly that; it has been removed.
 
-- **It is a hero variant, not a theme.** Only `.hero` changes — no other page
-  or component is touched, so nothing else in the site can regress.
-- **Defaults:** the visitor's stored choice wins; with nothing stored it
-  follows `prefers-color-scheme: dark`. So the hero matches the machine.
-- **The toggle flips whatever is actually showing**, not the stored value —
-  otherwise the first click on a dark-OS machine (where the visible state came
-  from the OS, not from storage) would contradict its own label.
-- Applied before first paint (`home.js` runs at the end of `<body>`, after the
-  hero markup), so a dark-OS visitor never sees a cream flash.
+### A dark hero variant was tried and rejected
+
+Between 2026-09-17 and 2026-09-18 the hero could be switched to a dark
+“cinematic” treatment. The owner rejected it: the copy was hard to read over
+the dark wash. It is gone (CSS, markup and `home.js` all removed) and the hero
+is bright-only. Several of its rules were also load-bearing for the bug above,
+so do not resurrect it from git history without fixing `.grad` first.
 
 ## Dish management & images (admin)
 
@@ -438,7 +445,7 @@ form is what actually lands in storage rather than whatever was typed.
 | — | Homepage hero photo backdrop w/ crossfade + scroll fade | **Done** — 3 verified Unsplash photos crossfading 2.4s every 6.5s, cream tint for text contrast, bottom melt into page bg; reduced-motion safe; degrades to cream hero offline |
 | — | Order cancellation (customer while pending, admin refuse) | **Done** — off-flow `cancelled` terminal status with a recorded reason + actor; customer button while pending, admin refuse at any point before delivery; cancelling releases any promo code the order had spent. Run `cancel-schema.sql` for cloud mode |
 | — | One-time promo codes | **Done** — `DISHWELCOME` is one use per account and first-order-only; `FAST10` stays repeatable; cancel the order and the code comes back. Run `promo-schema.sql` for cross-device enforcement |
-| — | Dark cinematic hero variant | **Done** — toggleable night-time treatment of the hero (glass chrome, Ken Burns crossfade, 58% melt), remembered per browser and following the OS dark-mode setting by default |
+| — | Homepage hero: single-column layout, collage & stat chips removed | **Done** — the right-hand photo collage and the floating “Free delivery” / “12,000+ happy customers” chips are gone; free delivery moved into the proof row. A dark “cinematic” hero variant was built, **rejected by the owner and removed** — the hero is bright-only |
 | — | Bulk admin actions (advance many orders at once) | Not started |
 | — | Push-notification simulation on status change | Not started |
 | — | Admin analytics: revenue by method, AOV, peak-hours heatmap | **Done** — all three shipped with the Reports page (item 5) |
