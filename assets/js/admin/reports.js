@@ -63,6 +63,14 @@
   function summarize(orders) {
     const paid = orders.filter(isPaid);
     const revenue = paid.reduce(function (s, o) { return s + Number(o.total || 0); }, 0);
+    /* Refunds are reported as their own figure rather than being sprinkled away:
+       isPaid() already answers false for a refunded order (payStatusOf derives
+       'refunded'), so `revenue` above is money the business ACTUALLY kept, and
+       `refundAmount` is what it gave back. Both numbers are visible, which is
+       the only honest way to present them. */
+    const refunded = orders.filter(function (o) { return UI.payStatusOf(o) === 'refunded'; });
+    const refundAmount = refunded.reduce(function (s, o) { return s + Number(o.total || 0); }, 0);
+    const refundPending = orders.filter(function (o) { return o.refund && o.refund.status === 'requested'; }).length;
     const items = orders.reduce(function (s, o) {
       return s + (o.items || []).reduce(function (n, it) { return n + (Number(it.qty) || 0); }, 0);
     }, 0);
@@ -70,6 +78,9 @@
       revenue: revenue,
       orders: orders.length,
       paidOrders: paid.length,
+      refundCount: refunded.length,
+      refundAmount: refundAmount,
+      refundPending: refundPending,
       items: items,
       /* AOV on ALL orders (paid or not): the average size of an order the
          business actually takes. Revenue/paidOrders would conflate two ideas. */
@@ -139,14 +150,16 @@
   }
 
   function ordersToCsv(orders) {
-    const head = ['Order', 'Placed (Lagos)', 'Customer', 'Phone', 'City', 'Items', 'Subtotal', 'Delivery fee', 'Discount', 'Total', 'Payment method', 'Payment status', 'Order status'];
+    const head = ['Order', 'Placed (Lagos)', 'Customer', 'Phone', 'City', 'Items', 'Subtotal', 'Delivery fee', 'Discount', 'Total', 'Payment method', 'Payment status', 'Refund', 'Order status'];
     const rows = orders.map(function (o) {
       const items = (o.items || []).map(function (it) { return it.qty + 'x ' + it.name + (it.note ? ' (' + it.note + ')' : ''); }).join('; ');
       return [
         o.id, lagosParts(o.placedAt) && new Date(o.placedAt).toLocaleString('en-GB', { timeZone: LAGOS_TZ }),
         o.customer.name, o.customer.phone, o.customer.city, items,
         o.sub, o.deliveryFee, o.discount, o.total,
-        UI.payMethodLabel(o.pay), UI.payStatusOf(o), o.status
+        UI.payMethodLabel(o.pay), UI.payStatusOf(o),
+        o.refund ? ((D.refundMeta(o.refund.status) || {}).label || o.refund.status) + ' ' + o.refund.amount : '',
+        o.status
       ].map(csvEscape).join(',');
     });
     return '\uFEFF' + head.join(',') + '\n' + rows.join('\n');
@@ -183,6 +196,13 @@
       { ic: 'cal', cls: 'si-user', label: 'Average order value', val: D.naira(cur.aov), delta: deltaHTML(cur.aov, prev ? prev.aov : null) },
       { ic: 'bag', cls: 'si-food', label: 'Items sold', val: String(cur.items), delta: '' }
     ];
+    if (cur.refundCount || cur.refundPending) {
+      cards.push({
+        ic: 'refresh', cls: 'si-cancel', label: 'Refunds', val: D.naira(cur.refundAmount),
+        delta: '<span class="rpt-delta flat">' + cur.refundCount + ' refund' + (cur.refundCount === 1 ? '' : 's')
+          + (cur.refundPending ? ' · ' + cur.refundPending + ' awaiting decision' : '') + '</span>'
+      });
+    }
     return cards.map(function (c) {
       return '<div class="stat-card" data-reveal><span class="stat-ico ' + c.cls + '">' + UI.ic(c.ic) + '</span>'
         + '<div class="stat-body"><b>' + esc(c.label) + '</b><div class="val">' + esc(c.val) + '</div>'
@@ -253,14 +273,17 @@
       + '<div class="dash-grid">'
       + '<div class="chart-card"><h3>' + UI.ic('wallet') + ' Revenue by payment method</h3>'
       + '<div class="cc-sub">Paid money only — card payments, verified transfers and collected cash. '
-      + cur.paidOrders + ' of ' + cur.orders + ' orders in this period are paid.</div>'
+      + cur.paidOrders + ' of ' + cur.orders + ' orders in this period are paid'
+      + (cur.refundCount ? ', net of ' + cur.refundCount + ' refund' + (cur.refundCount === 1 ? '' : 's') + ' (' + D.naira(cur.refundAmount) + ')' : '')
+      + '.</div>'
       + methodRows(methods) + '</div>'
       + '<div class="chart-card"><h3>' + UI.ic('clock') + ' Peak ordering hours</h3>'
       + heatmapHTML(hm) + '</div>'
       + '</div>'
       + '<p class="rpt-footnote">' + UI.ic('info') + '<span>Demo data note: revenue counts only orders whose payment has been '
       + 'marked paid (card at checkout, transfers verified by an admin, cash collected on delivery). '
-      + 'Pending and awaiting-verification orders are shown in order counts but not in revenue, so the headline number is defensible.</span></p>';
+      + 'Pending and awaiting-verification orders are shown in order counts but not in revenue, so the headline number is defensible. '
+      + 'Approved refunds are deducted the same way and reported as their own figure.</span></p>';
 
     root.querySelectorAll('[data-range]').forEach(function (b) {
       b.addEventListener('click', function () { state.range = b.getAttribute('data-range'); render(); });

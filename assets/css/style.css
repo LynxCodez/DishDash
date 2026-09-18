@@ -940,6 +940,26 @@ input[type=checkbox].switch:focus-visible{outline-offset:2px}
 .pay-paid{background:var(--acc-50);color:var(--acc-700);border-color:var(--acc-200)}
 .pay-pending{background:var(--amber-bg);color:var(--amber);border-color:var(--amber-line)}
 .pay-awaiting{background:var(--violet-bg);color:var(--violet);border-color:var(--violet-line)}
+.pay-refunded{background:var(--err-bg);color:var(--err);border-color:var(--err-line)}
+
+/* ---------- 34. Refunds ---------- */
+/* One chip for "asked for / given / refused" wherever an order is listed. */
+.rf-chip{display:inline-flex;align-items:center;gap:6px;font-size:.76rem;font-weight:750;padding:4px 10px;border-radius:99px;border:1px solid;white-space:nowrap}
+.rf-chip .ic{width:.9em;height:.9em}
+.rf-requested{background:var(--amber-bg);color:var(--amber);border-color:var(--amber-line)}
+.rf-approved{background:var(--err-bg);color:var(--err);border-color:var(--err-line)}
+.rf-rejected{background:var(--bg-soft);color:var(--muted);border-color:var(--line)}
+/* the explanatory block under an order row — same shape as .cancel-note */
+.refund-note{display:flex;gap:12px;align-items:flex-start;border-radius:var(--r-md);padding:13px 15px;margin-top:14px;background:var(--amber-bg);border:1px solid var(--amber-line);color:var(--amber)}
+.refund-note.approved{background:var(--err-bg);border-color:var(--err-line);color:var(--err)}
+.refund-note.rejected{background:var(--bg-soft);border-color:var(--line);color:var(--muted)}
+.refund-note>svg{flex:none;margin-top:2px;width:1.15rem;height:1.15rem}
+.refund-note b{display:block;font-size:.92rem;margin-bottom:2px}
+.refund-note span span{display:block;font-size:.83rem;color:var(--ink-2);line-height:1.5}
+.refund-note .rf-amount{font-weight:800;color:var(--ink)}
+.refund-summary{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;border:1px solid var(--line);border-radius:var(--r-md);background:var(--bg-soft);padding:12px 14px;margin-top:12px;font-size:.88rem;color:var(--ink-2);line-height:1.55}
+.refund-summary b{color:var(--ink)}
+.refund-summary .ic{width:16px;height:16px;flex:none;margin-top:2px;color:var(--brand-600)}
 
 /* shared key/value rows on customer pages (admin.css has its own) */
 .kv{display:flex;gap:10px;padding:6px 0;font-size:.92rem}

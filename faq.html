@@ -244,9 +244,19 @@
             <details class="faq-item" id="refunds">
               <summary>How do refunds work?<svg class="ic" aria-hidden="true"><use href="#i-chev-d"></use></svg></summary>
               <div class="faq-a">
-                <p>Since no real payment ever happens, there is nothing to refund: cancelling an order simply removes it from the books —
-                  cancelled orders are excluded from revenue, order counts and average order value — and releases its promo code.</p>
-                <p>In a real deployment this is where an actual refund window and payment-provider flow would slot in.</p>
+                <p><b>You ask, we decide.</b> Open the order (from <i>My orders</i> or its tracking page) and choose
+                  <b>Request a refund</b> — you can say what went wrong, though it is optional. One request per order.</p>
+                <ul>
+                  <li>You can ask once the order is <b>delivered or cancelled</b> and its payment shows as <b>Paid</b>. A live order is stopped
+                    with <i>Cancel order</i> instead — that is a different tool.</li>
+                  <li>The refund is for the <b>full order total</b>. There is no partial refund.</li>
+                  <li>The support team approves or declines it by hand, and their note appears on the order with the amount and the date.</li>
+                  <li>A decision is <b>final</b> — a declined refund cannot be asked for again.</li>
+                  <li>An approved refund flips the order's payment badge to <b>Refunded</b> and takes the money out of what DishDash reports
+                    as revenue, so the numbers stay honest.</li>
+                </ul>
+                <p>Because payments in this demo are simulated, no bank transfer of money actually happens — the workflow around it is real,
+                  the movement of funds is not.</p>
               </div>
             </details>
           </section>

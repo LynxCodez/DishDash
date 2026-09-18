@@ -391,6 +391,23 @@ a caller toast success for a write that returned none. The matching migration
 is `supabase/cancel-schema.sql` (a customer may flip their OWN `pending` order
 to `cancelled` and nothing else).
 
+**Refunds are DERIVED state on the order, never stored on it.** A refund is a
+row in `refund_requests` (own table, primary key = order id → one request per
+order; full amount; decision final). `store.js` `attachRefunds()` merges those
+rows onto every order its `orders()` hands out as `order.refund`, in BOTH
+modes — the cloud adapter's `S.orders` calls the same function, so any future
+backend MUST do the same or refunds will vanish from the UI without an error.
+`saveOrders()` strips the decoration. Consequences worth knowing: (1)
+`UI.payStatusOf(order)` returns `'refunded'` for an approved refund, so
+`isPaid()` and every revenue figure nets refunds out with no extra filter —
+don't add one; (2) a *requested* refund must NOT change the payment status
+(the money has not moved yet); (3) the customer never writes to
+`public.orders` for a refund — insert-only on their own `refund_requests` row,
+admin-only update — which is exactly why this is its own table instead of a
+`status_history` entry like cancellation (see `supabase/refund-schema.sql`
+for the full reasoning); (4) cloud mode needs `refund-schema.sql`, and a
+missing table is reported as a clear actionable error, never a fake success.
+
 **Promo codes are ALL one-time, and that is a policy, not a per-code flag.**
 `DD_DATA.PROMO_POLICY = { oncePerAccount: true }` is read by `checkPromo`, so
 every code — including any added later — is single-use per account
@@ -500,6 +517,14 @@ screen; later pushes reuse the stored credential.
   links (`faq.html#cancel-order`, `terms.html#privacy`) — keep them stable;
   the FAQ stays native-`<details>` static HTML; the legal copy must stay
   honest that payments, delivery and the bank account are simulated.
+- **Refunds**: DONE (2026-09-18) — customer requests on a paid + terminal
+  order, admin approves/declines from the order detail or the new **Refunds**
+  tab, note visible to the customer, approved money leaves revenue (dashboard
+  cards + reports, refunded figure shown separately), payment badge flips to
+  Refunded. `supabase/refund-schema.sql` is REQUIRED for refunds in cloud mode
+  (see section 4 for the derived-state contract). The FAQ (`faq.html` →
+  "How do refunds work?") and `terms.html` section 7 describe the flow — both
+  used to claim "refunds do not arise", so keep them in step if the rules move.
 - Admin **review/feedback moderation screen**: DB permits it, no UI.
 - Admin analytics: revenue by payment method, AOV, peak-hours heatmap —
   DONE (shipped with the Reports page).

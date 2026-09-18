@@ -198,12 +198,27 @@ window.DD_DATA = (function () {
     { key: 'bank_transfer', label: 'Bank transfer',  sub: 'Transfer to our demo account (simulated)',           emoji: '🏦' }
   ];
 
-  // payment status badges — kept separate from order status on purpose
+  // payment status badges — kept separate from order status on purpose.
+  // 'refunded' is DERIVED (see UI.payStatusOf): it is not stored on the order,
+  // it is read from the order's refund record, so refunded money can never
+  // linger in a revenue figure by accident.
   const PAY_STATUS = {
     paid:                 { label: 'Paid',                  cls: 'st-delivered' },
     pending:              { label: 'Pending',               cls: 'st-pending'   },
-    awaiting_verification: { label: 'Awaiting Verification', cls: 'st-preparing' }
+    awaiting_verification: { label: 'Awaiting Verification', cls: 'st-preparing' },
+    refunded:             { label: 'Refunded',              cls: 'st-cancelled' }
   };
+
+  /* refunds — a customer asks, an admin decides (full amount only).
+     The record lives in its own table/list keyed by order id (one request per
+     order, and a decision is final), and the store decorates every order it
+     hands out with `order.refund` so pages never have to join anything. */
+  const REFUND_STATUS = {
+    requested: { key: 'requested', label: 'Refund requested', cls: 'rf-requested', desc: 'Waiting for DishDash to review it.' },
+    approved:  { key: 'approved',  label: 'Refunded',         cls: 'rf-approved',  desc: 'The money has been returned.' },
+    rejected:  { key: 'rejected',  label: 'Refund declined',  cls: 'rf-rejected',  desc: 'DishDash reviewed it and said no.' }
+  };
+  function refundMeta(key) { return REFUND_STATUS[key] || null; }
 
   // clearly fictional demo bank details for the simulated transfer flow
   const DEMO_BANK = {
@@ -316,6 +331,7 @@ window.DD_DATA = (function () {
   return {
     img, naira, CATEGORIES, FOODS, GALLERY, SEED_USERS, SEED_ORDERS, STATUS_FLOW,
     CANCELLED, statusMeta, checkPromo,
-    PROMOS, PROMO_POLICY, CONFIG, PAY_METHODS, PAY_STATUS, DEMO_BANK, NG_BANKS, getCategory, getFood, countByCat, foodsInCat
+    PROMOS, PROMO_POLICY, CONFIG, PAY_METHODS, PAY_STATUS, REFUND_STATUS, refundMeta,
+    DEMO_BANK, NG_BANKS, getCategory, getFood, countByCat, foodsInCat
   };
 })();

@@ -300,9 +300,18 @@ window.DD_STORE = (function () {
       }
     });
     if (changed) saveOrders(list);
-    return list;
+    return withRefunds(list);
   }
-  function saveOrders(list) { write('orders', list); }
+  function saveOrders(list) {
+    // Strip the read-only refund decoration (see withRefunds) so a save can
+    // never persist a stale copy of the refund alongside the real record.
+    write('orders', list.map(function (o) {
+      if (!o.refund) return o;
+      const copy = Object.assign({}, o);
+      delete copy.refund;
+      return copy;
+    }));
+  }
 
   /* ---------------- reviews (local mode) ---------------- */
   function reviews() { return read('reviews', D.SEED_REVIEWS || []); }
@@ -842,6 +851,111 @@ window.DD_STORE = (function () {
     return { by: last.by || 'customer', reason: last.reason || 'No reason given', at: last.at || null };
   }
 
+  /* ---------------- refunds (customer asks, admin decides) --------------
+     Full-amount, one request per order, one final decision. Rules:
+       · the order must be PAID (there is nothing to refund otherwise) and
+         finished — delivered or cancelled — so a refund is always a response
+         to an outcome, not a way to stop a live order (cancel does that);
+       · a request is pending until an admin approves or declines it;
+       · a decision is final: a declined refund cannot be re-requested.
+
+     The record lives in its OWN list/table keyed by order id rather than
+     inside the order, because in cloud mode a customer has no write policy
+     on orders beyond their own pending cancellation — and financial records
+     belong in their own row anyway. orders() decorates each order it hands
+     out with `refund`, so pages (and UI.payStatusOf) never join anything. */
+  function refundRequests() { return read('refunds', null) || []; }
+  function saveRefundRequests(list) { write('refunds', list); }
+  function findRefund(orderId) {
+    const id = String(orderId == null ? '' : orderId);
+    return refundRequests().find(function (r) { return String(r.orderId) === id; }) || null;
+  }
+  function refundView(r) {
+    if (!r) return null;
+    return {
+      status: r.status,
+      amount: Number(r.amount) || 0,
+      reason: r.reason || '',
+      note: r.note || '',
+      requestedAt: r.createdAt || null,
+      decidedAt: r.decidedAt || null,
+      decidedBy: r.decidedBy || null
+    };
+  }
+  /* Attach the refund record to each order for READ purposes only. The copy
+     keeps orders immutable to callers; saveOrders() strips the extra key so it
+     can never be written back into storage as stale duplicated state. */
+  function withRefunds(list, records) {
+    if (!list || !list.length) return list;
+    const map = {};
+    (records || refundRequests()).forEach(function (r) { map[String(r.orderId)] = r; });
+    if (!Object.keys(map).length) return list;
+    return list.map(function (o) {
+      const r = map[String(o.id)];
+      return r ? Object.assign({}, o, { refund: refundView(r) }) : o;
+    });
+  }
+  function refundInfo(order) { return (order && order.refund) || null; }
+  function canRequestRefund(order) {
+    if (!order) return { ok: false, error: 'Order not found.' };
+    const r = refundInfo(order);
+    if (r) {
+      if (r.status === 'approved') return { ok: false, error: 'This order has already been refunded.' };
+      if (r.status === 'requested') return { ok: false, error: 'A refund for this order is already waiting to be reviewed.' };
+      return { ok: false, error: 'A refund for this order was already declined.' };
+    }
+    if (normPayStatus(order) !== 'paid') return { ok: false, error: 'Only a paid order can be refunded.' };
+    if (order.status !== 'delivered' && order.status !== 'cancelled') {
+      return { ok: false, error: 'You can ask for a refund once the order is delivered or cancelled.' };
+    }
+    return { ok: true };
+  }
+  function requestRefund(orderId, reason) {
+    const o = getOrder(orderId);
+    const gate = canRequestRefund(o);
+    if (!gate.ok) return gate;
+    const list = refundRequests();
+    if (list.some(function (r) { return String(r.orderId) === String(o.id); })) {
+      return { ok: false, error: 'A refund for this order has already been recorded.' };
+    }
+    const rec = {
+      orderId: String(o.id), userId: o.userId || null, amount: Number(o.total) || 0,
+      reason: String(reason || '').trim() || 'No reason given',
+      status: 'requested', note: '', decidedBy: null, decidedAt: null,
+      createdAt: new Date().toISOString()
+    };
+    list.push(rec);
+    saveRefundRequests(list);
+    broadcast('orders');   // every view repaints (order rows now carry .refund)
+    return { ok: true, refund: refundView(rec) };
+  }
+  function decideRefund(orderId, approve, note) {
+    const list = refundRequests();
+    const rec = list.find(function (r) { return String(r.orderId) === String(orderId); });
+    if (!rec) return { ok: false, error: 'There is no refund request on that order.' };
+    if (rec.status !== 'requested') return { ok: false, error: 'That refund has already been decided.' };
+    const u = currentUser();
+    rec.status = approve ? 'approved' : 'rejected';
+    rec.note = String(note || '').trim() || (approve ? 'Approved — full amount returned.' : 'Declined.');
+    rec.decidedBy = (u && u.name) || 'DishDash support';
+    rec.decidedAt = new Date().toISOString();
+    saveRefundRequests(list);
+    broadcast('orders');
+    return { ok: true, refund: refundView(rec) };
+  }
+  /* Money view for the dashboards: refunded money out of revenue, with the
+     refunded and still-pending figures surfaced separately. */
+  function refundTotals(list) {
+    const out = { count: 0, amount: 0, pending: 0 };
+    (list || []).forEach(function (o) {
+      const r = refundInfo(o);
+      if (!r) return;
+      if (r.status === 'approved') { out.count += 1; out.amount += Number(r.amount) || 0; }
+      else if (r.status === 'requested') out.pending += 1;
+    });
+    return out;
+  }
+
   /* ---------------- admin catalog CRUD ---------------- */
   // foodOverrides map:  { <id>: <food> }   (edits to base dishes + brand-new dishes whose id is > max base id)
   // foodDeleted array:  [ <baseId>, ... ]  (tombstones for removed base dishes)
@@ -985,6 +1099,9 @@ window.DD_STORE = (function () {
     // orders
     orders, sortOrders, getOrder, myOrders, placeOrder, updateOrderStatus, nextStatus, statusIndex,
     canCancel, cancelOrder, cancelInfo,
+    // refunds — attachRefunds() is the ONE merge of refund records onto orders;
+    // the cloud adapter calls it too, so both modes decorate identically.
+    refundInfo, refundTotals, canRequestRefund, requestRefund, decideRefund, refundRequests, attachRefunds: withRefunds,
     verifyTransfer, confirmPayment,
     // promo
     validatePromo, promoUsedByMe, myPromoUses, redeemPromo, releasePromo, setPromoOwner,
@@ -1188,6 +1305,7 @@ window.DD_STORE_SYNC = (function () {
       await pullCatalog();
       await bridgeAuth();
       pullPromoUses().catch(function () {});
+      pullRefunds().catch(function () {});
       subscribeRealtime();
       state.ready = true;
     } catch (e) {
@@ -1773,6 +1891,90 @@ window.DD_STORE_SYNC = (function () {
     await pullPromoUses();
   }
 
+  /* ---------------- refunds (cloud) ----------------
+     A refund record is its own row in `refund_requests`, keyed by order id:
+     the customer inserts one on their own order (RLS: user_id = auth.uid()),
+     only an admin may update it (approve/decline). Nothing on the order row is
+     touched, so the customer never needs a broad write policy on public.orders
+     — the important consequence for whoever reads this next.
+
+     The migration is OPTIONAL in the same way the promo table is: without
+     `supabase/refund-schema.sql` the app must still boot and still let people
+     order, so a missing table is detected once and reported as a clear,
+     actionable message instead of a failure nobody can explain. */
+  let refundTableMissing = false;
+  function refundFromDb(r) {
+    if (!r) return null;
+    return {
+      orderId: r.order_id, userId: r.user_id || null,
+      status: r.status || 'requested', amount: toNum(r.amount),
+      reason: r.reason || '', note: r.note || '',
+      decidedBy: r.decided_by || null, decidedAt: r.decided_at || null,
+      createdAt: r.created_at || null
+    };
+  }
+  function refundsUnavailableError() {
+    return new Error('Refunds are not enabled on the server yet — run supabase/refund-schema.sql.');
+  }
+  /* The trimmed shape pages read off an order — same fields as the local
+     store's refundView(), built from a database row. */
+  function refundViewOf(r) {
+    const m = refundFromDb(r);
+    if (!m) return null;
+    return {
+      status: m.status, amount: m.amount, reason: m.reason, note: m.note,
+      requestedAt: m.createdAt, decidedAt: m.decidedAt, decidedBy: m.decidedBy
+    };
+  }
+  async function pullRefunds() {
+    if (refundTableMissing) return [];
+    const c = state.client;
+    const { data, error } = await c.from('refund_requests')
+      .select('*').order('created_at', { ascending: false }).limit(500);
+    if (error) {
+      if (isMissingTable(error) && !refundTableMissing) {
+        refundTableMissing = true;
+        console.warn('[store] refund_requests is missing — refunds are unavailable in cloud mode. Run supabase/refund-schema.sql.');
+      }
+      return [];
+    }
+    const rows = (data || []).map(refundFromDb);
+    shadowWrite('refunds', rows);
+    return rows;
+  }
+  async function requestRefundRow(o, reason) {
+    if (refundTableMissing) throw refundsUnavailableError();
+    const u = await currentUser();
+    const { data, error } = await state.client.from('refund_requests').insert({
+      order_id: String(o.id), user_id: u ? u.id : null, amount: toNum(o.total),
+      reason: String(reason || '').trim() || 'No reason given', status: 'requested'
+    }).select().single();
+    if (error) {
+      if (isMissingTable(error)) { refundTableMissing = true; throw refundsUnavailableError(); }
+      throw error;
+    }
+    return { ok: true, refund: refundViewOf(data) };
+  }
+  /* .eq('status','requested') + .single(): asking for the row back means a
+     decision that matched zero rows (already decided, or RLS said no) is an
+     ERROR rather than a 200 that pretends it worked. */
+  async function decideRefundRow(orderId, approve, note) {
+    if (refundTableMissing) throw refundsUnavailableError();
+    const u = await currentUser();
+    const { data, error } = await state.client.from('refund_requests').update({
+      status: approve ? 'approved' : 'rejected',
+      note: String(note || '').trim() || (approve ? 'Approved — full amount returned.' : 'Declined.'),
+      decided_by: (u && u.name) || 'DishDash support',
+      decided_at: new Date().toISOString()
+    }).eq('order_id', String(orderId)).eq('status', 'requested').select().single();
+    if (error) {
+      if (isMissingTable(error)) { refundTableMissing = true; throw refundsUnavailableError(); }
+      if (error.code === 'PGRST116') throw new Error('That refund request no longer exists — it may already have been decided.');
+      throw error;
+    }
+    return { ok: true, refund: refundViewOf(data) };
+  }
+
   /* The verified paying-account snapshot (item 3) is stored in a pay_account
      column. A project created before that migration lacks it, and Postgres
      would reject the WHOLE order — so an un-run migration must never be able
@@ -1908,6 +2110,10 @@ window.DD_STORE_SYNC = (function () {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, function () {
           if (!state.applying) pullCatalog().catch(function () {});
         })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'refund_requests' }, function () {
+          // a refund was requested or decided elsewhere — repaint every order
+          if (!state.applying) pullRefunds().then(function () { S.broadcast('orders'); }).catch(function () {});
+        })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, function () {
           if (!state.applying) {
             // A new customer just signed up (or edited their profile) in another
@@ -1945,6 +2151,7 @@ window.DD_STORE_SYNC = (function () {
       registerUser, login, logout, currentUser, updateProfile,
       pullOrders, pullCatalog, pullUsers, placeOrder, updateOrder,
       pullPromoUses, redeemPromoRow, releasePromoRow,
+      pullRefunds, requestRefundRow, decideRefundRow, refundFromDb,
     pullReviews, addReviewCloud, updateReviewCloud, deleteReviewCloud, feedbackSubmitCloud,
     requestEmailCode, confirmEmailCode, markEmailVerified, resendConfirmationEmail, confirmSignupOtp, lastDemoCode,
     setVerificationMode, verificationMode,
@@ -2061,6 +2268,9 @@ window.DD_CLOUD = (function () {
     // redemption records belong to the ACCOUNT, so they must be scoped to the
     // session that is being restored, not left over from the previous one
     await Y.pullPromoUses().catch(function () {});
+    // refunds are scoped to the session as well (a customer sees their own, an
+    // admin sees all) — re-pull on every session change, like the orders cache
+    await Y.pullRefunds().catch(function () {});
     if (sessionCache) favsCache = await Y.getFavIds().catch(function () { return []; });
     else favsCache = [];
     // re-scope the order cache to the new session — otherwise a customer who
@@ -2077,7 +2287,11 @@ window.DD_CLOUD = (function () {
     S.foods = function () { return Y._shadow.read('foods', window.DD_DATA.FOODS); };
     S.categories = function () { return Y._shadow.read('cats', window.DD_DATA.CATEGORIES); };
     S.getCategory = function (id) { return S.categories().find(function (c) { return c.id === id; }) || null; };
-    S.orders = function () { return Y._shadow.read('orders', []); };
+    // Orders are decorated with their refund record on the way out, so every
+    // consumer (payStatusOf, reports, badges, timelines) reads one shape.
+    S.orders = function () {
+      return S.attachRefunds(Y._shadow.read('orders', []), Y._shadow.read('refunds', []));
+    };
 
     /* ---------- reviews & feedback ---------- */
     S.reviews = function () { return Y._shadow.read('reviews', []); };
@@ -2221,6 +2435,30 @@ window.DD_CLOUD = (function () {
         // instead of toasting a cancellation that never happened.
         S.broadcast('orders');
         return { ok: false, error: (err && err.message) || 'Could not cancel this order. Please try again.' };
+      });
+    };
+
+    /* ---------- refunds (customer asks, admin decides) ---------- */
+    S.refundRequests = function () { return Y._shadow.read('refunds', []); };
+    S.requestRefund = function (orderId, reason) {
+      const o = S.getOrder(orderId);
+      // canRequestRefund() is pure field inspection — the local rules apply verbatim
+      const gate = S.canRequestRefund(o);
+      if (!gate.ok) return Promise.resolve(gate);
+      return Y.requestRefundRow(o, reason).then(function (res) {
+        return Y.pullRefunds().then(function () { S.broadcast('orders'); return res; });
+      }).catch(function (err) {
+        // never report a request that did not reach the server
+        S.broadcast('orders');
+        return { ok: false, error: (err && err.message) || 'Could not send the refund request. Please try again.' };
+      });
+    };
+    S.decideRefund = function (orderId, approve, note) {
+      return Y.decideRefundRow(orderId, approve, note).then(function (res) {
+        return Y.pullRefunds().then(function () { S.broadcast('orders'); return res; });
+      }).catch(function (err) {
+        S.broadcast('orders');
+        return { ok: false, error: (err && err.message) || 'Could not record that decision. Please try again.' };
       });
     };
 

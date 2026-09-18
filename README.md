@@ -488,9 +488,53 @@ form is what actually lands in storage rather than whatever was typed.
 | — | One-time promo codes | **Done** — **every** code is single-use per account via the global `DD_DATA.PROMO_POLICY` (new codes inherit it automatically); `DISHWELCOME` is additionally first-order-only; cancel the order and the code comes back. Run `promo-schema.sql` for cross-device enforcement |
 | — | Homepage hero: single-column layout, collage & stat chips removed | **Done** — the right-hand photo collage and the floating “Free delivery” / “12,000+ happy customers” chips are gone; free delivery moved into the proof row. A dark “cinematic” hero variant was built, **rejected by the owner and removed** — the hero is bright-only |
 | — | FAQs + Terms & conditions pages | **Done** — footer **Help** column links to `faq.html` (21 questions in six topics, live search, one-open accordion, deep links like `faq.html#cancel-order`, contact card built from `DD_DATA.CONFIG`) and `terms.html` (13 numbered sections with a sticky scroll-spy index and a demo/simulation honesty table). Both static-first: the FAQ is native `<details>`, so it still reads with JS off |
+| — | Refund system (customer requests, admin decides) | **Done** — customer asks on a paid, finished order (full total, one request per order, decision final); admin approves or declines from the order detail or the **Refunds** tab, with a note the customer sees. Approved refunds leave revenue (dashboard + reports net them out; the refunded figure is reported separately) and flip the payment badge to Refunded. Stored in its own `refund_requests` table so customers never write to `orders` — run `refund-schema.sql` for cloud mode |
 | — | Bulk admin actions (advance many orders at once) | Not started |
 | — | Push-notification simulation on status change | Not started |
 | — | Admin analytics: revenue by method, AOV, peak-hours heatmap | **Done** — all three shipped with the Reports page (item 5) |
+
+## Refunds
+
+A customer asks, an admin decides, full amount only — and the record is its
+own row, not a column on the order.
+
+- **Who can ask:** the customer, on an order that is **paid** and **finished**
+  (delivered or cancelled). A live order is stopped with *cancellation*, not a
+  refund — the two are deliberately different tools. One request per order.
+- **Who decides:** an admin, from the order's detail panel or the **Refunds**
+  tab in the admin console (which lists every order carrying a refund record).
+  Approve or decline, with a note that the customer sees verbatim.
+- **A decision is final.** An approved refund takes the order out of revenue
+  and flips its payment badge to **Refunded**; a declined one leaves the order
+  paid and the customer sees the reason. Neither can be re-opened, and the
+  customer cannot ask twice.
+- **The money is reported honestly.** `UI.payStatusOf(order)` returns
+  `'refunded'` for an approved refund, so `isPaid()` — and therefore the
+  dashboard revenue, the reports revenue, AOV and the method breakdown — nets
+  it out automatically, while the refunded figure stays visible as its own
+  card (dashboard) and its own column/CSV field (reports).
+
+### How it is stored (and why)
+
+`refund_requests` is a separate table/list keyed by **order id** (the primary
+key *is* the "one request per order" rule) with `amount`, `reason`, `status`,
+`note`, `decided_by`, `decided_at`.
+
+The tempting alternative — appending a refund entry to the order's
+`status_history` the way cancellation does — was rejected on purpose: it would
+have needed a broad "customers may update their own orders" RLS policy, and a
+customer who can update their own order row can also rewrite its total, items
+or address. With its own table the customer **never writes to
+`public.orders` at all**: they may insert a request on their own order
+(`with check (auth.uid() = user_id and status = 'requested')`) and read it
+back, and only an admin may update it. Run `supabase/refund-schema.sql` for
+cloud mode.
+
+Every order handed out by the store is decorated with its refund record
+(`order.refund`), in both modes — `attachRefunds()` in `store.js` is the single
+implementation, and the cloud adapter calls the same function. The decoration
+is read-only: `saveOrders()` strips it, so a refund can never be duplicated
+into an order row as stale state.
 
 ## Order lifecycle
 

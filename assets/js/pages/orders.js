@@ -7,6 +7,35 @@
 
   let activeTab = 'active';
 
+  /* The refund block under an order row — why the money came (or did not come)
+     back, in the customer's words and the support team's. */
+  function refundNoteHTML(r) {
+    if (!r) return '';
+    const cls = r.status === 'approved' ? ' approved' : (r.status === 'rejected' ? ' rejected' : '');
+    const icon = r.status === 'approved' ? 'refresh' : (r.status === 'rejected' ? 'x' : 'clock');
+    const title = r.status === 'approved' ? 'Refunded ' + D.naira(r.amount)
+      : (r.status === 'rejected' ? 'Refund declined' : 'Refund requested — awaiting review');
+    const lines = [];
+    if (r.status === 'requested') lines.push('You asked on ' + UI.fmtDate(r.requestedAt) + ' · ' + UI.esc(r.reason));
+    else if (r.decidedAt) lines.push((r.status === 'approved' ? 'Support refunded ' + D.naira(r.amount) : 'Support declined this request')
+      + ' on ' + UI.fmtDate(r.decidedAt) + ' · ' + UI.esc(r.note));
+    return '<div class="refund-note' + cls + '">' + UI.ic(icon) + '<span><b>' + UI.esc(title) + '</b>'
+      + '<span>' + lines.join('<br>') + '</span></span></div>';
+  }
+
+  /* The same story, laid out as key/value rows for the details dialog. */
+  function refundDetailHTML(r) {
+    if (!r) return '';
+    return '<div class="refund-summary">' + UI.ic('refresh')
+      + '<span><b>' + UI.esc((D.refundMeta(r.status) || {}).label || r.status) + '</b> — ' + D.naira(r.amount)
+      + '<br>Requested ' + UI.fmtDate(r.requestedAt) + ' · ' + UI.esc(r.reason)
+      + (r.decidedAt
+        ? '<br>' + (r.status === 'approved' ? 'Approved' : 'Declined') + ' ' + UI.fmtDate(r.decidedAt)
+          + (r.decidedBy ? ' by ' + UI.esc(r.decidedBy) : '') + (r.note ? ' · ' + UI.esc(r.note) : '')
+        : '<br>Support has not decided yet.')
+      + '</span></div>';
+  }
+
   function orderRow(o) {
     const active = !UI.isTerminal(o.status);
     const info = S.cancelInfo(o);
@@ -30,8 +59,10 @@
           + UI.esc(info ? info.reason : 'Cancelled') + ' · ' + (info && info.by === 'admin' ? 'by DishDash support' : 'by you')
           + (info && info.at ? ' · ' + UI.fmtDate(info.at) : '') + '</span></span></div>'
         : '')
+      + refundNoteHTML(o.refund)
       + '<div class="or-foot">'
       + '<span class="or-total"><small>Total</small>' + D.naira(o.total) + '</span>'
+      + UI.refundBadge(o.refund)
       + (o.status === 'cancelled'
         ? '<span class="badge badge-danger">' + UI.ic('x') + ' Cancelled</span>'
         : (o.status === 'delivered'
@@ -59,12 +90,17 @@
       + '<div class="kv"><b>Placed</b><span>' + UI.fmtDate(o.placedAt) + '</span></div>'
       + (o.discount > 0 ? '<div class="kv"><b>Promo ' + (o.promoCode ? '(' + UI.esc(o.promoCode) + ')' : 'discount') + '</b><span>&minus;' + D.naira(o.discount) + '</span></div>' : '')
       + '<div class="kv"><b>Total</b><span style="font-weight:800">' + D.naira(o.total) + '</span></div>'
+      + refundDetailHTML(o.refund)
       + '</div></div>';
     const canCancel = !!S.canCancel(o, 'customer').ok;
+    const canRefund = !!S.canRequestRefund(o).ok;
     const modal = UI.openModal(html, {
       title: 'Order ' + o.id,
       size: 'lg',
       foot: '<button class="btn btn-outline" data-print-receipt>' + UI.ic('receipt') + 'Print receipt</button>'
+        + (canRefund
+          ? '<button class="btn btn-outline" data-refund-order>' + UI.ic('refresh') + ' Request a refund</button>'
+          : '')
         + (canCancel
           ? '<button class="btn btn-danger" data-cancel-order>' + UI.ic('x') + ' Cancel order</button>'
           : '')
@@ -76,6 +112,13 @@
     if (again) again.addEventListener('click', function () { reorder(o); });
     const printBtn = modal.querySelector('[data-print-receipt]');
     if (printBtn) printBtn.addEventListener('click', function () { UI.printReceipt(o); });
+    const refundBtn = modal.querySelector('[data-refund-order]');
+    if (refundBtn) {
+      refundBtn.addEventListener('click', function () {
+        modal.close();
+        UI.refundRequestFlow(o, render);
+      });
+    }
     const cancelBtn = modal.querySelector('[data-cancel-order]');
     if (cancelBtn) {
       cancelBtn.addEventListener('click', function () {

@@ -88,6 +88,25 @@
     const payLabel = UI.payMethodLabel(order.pay);
     const info = S.cancelInfo(order);
     const canCancel = !!S.canCancel(order, 'customer').ok;
+    const refund = order.refund || null;
+    const canRefund = !!S.canRequestRefund(order).ok;
+    /* Refund state, spelled out: what was asked for, what support decided, and
+       that the money is (or is not) coming back. Terminal orders only — the
+       request button carries the same rule through canRequestRefund(). */
+    const refundNote = (function () {
+      const r = order.refund;
+      if (!r) return '';
+      const cls = r.status === 'approved' ? ' approved' : (r.status === 'rejected' ? ' rejected' : '');
+      const icon = r.status === 'approved' ? 'refresh' : (r.status === 'rejected' ? 'x' : 'clock');
+      const title = r.status === 'approved' ? 'Refunded ' + D.naira(r.amount)
+        : (r.status === 'rejected' ? 'Refund declined' : 'Refund requested — awaiting review');
+      const detail = r.status === 'requested'
+        ? 'Asked on ' + UI.fmtDate(r.requestedAt) + ' · ' + UI.esc(r.reason) + ' Support usually decides the same day.'
+        : (r.status === 'approved'
+          ? 'Approved on ' + UI.fmtDate(r.decidedAt) + (r.decidedBy ? ' by ' + UI.esc(r.decidedBy) : '')
+          : 'Declined on ' + UI.fmtDate(r.decidedAt) + ' · ' + UI.esc(r.note));
+      return '<div class="refund-note' + cls + '">' + UI.ic(icon) + '<span><b>' + UI.esc(title) + '</b><span>' + detail + '</span></span></div>';
+    })();
     const cancelNote = order.status === 'cancelled' && info
       ? '<div class="cancel-note">' + UI.ic('x')
         + '<span><b>This order was cancelled</b>'
@@ -103,14 +122,17 @@
       + '</div>'
       + timelineHTML(order)
       + cancelNote
+      + refundNote
       + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:22px">'
       + '<a class="btn btn-outline" href="orders.html">' + UI.ic('arrow-l') + 'All orders</a>'
+      + (canRefund ? '<button class="btn btn-outline" data-refund-order>' + UI.ic('refresh') + 'Request a refund</button>' : '')
       + (canCancel ? '<button class="btn btn-danger" data-cancel-order>' + UI.ic('x') + 'Cancel order</button>' : '')
       + (UI.isTerminal(order.status)
         ? '<button class="btn btn-ghost" data-reorder>' + UI.ic('refresh') + 'Order again</button>'
         : '<button class="btn btn-ghost" data-support>Need help? Contact us</button>')
       + '</div>'
       + (canCancel ? '<p class="promo-hint" style="margin-top:12px">' + UI.ic('info') + ' You can cancel free of charge while the order is still pending. Once the kitchen starts cooking it is final.</p>' : '')
+      + (canRefund ? '<p class="promo-hint" style="margin-top:12px">' + UI.ic('info') + ' Something wrong with a paid order? You can ask for a refund once it is delivered or cancelled.</p>' : '')
       + '</div>'
 
       + '<aside class="track-side">'
@@ -125,6 +147,7 @@
       + '<div class="sum-row" style="margin-top:12px"><span>Total</span><b>' + D.naira(order.total) + '</b></div>'
       + '<div class="sum-row"><span>Payment</span><b style="font-weight:700;font-size:.9rem">' + payLabel + '</b></div>'
       + '<div class="sum-row"><span>Payment status</span><b>' + UI.payBadge(UI.payStatusOf(order)) + '</b></div>'
+      + (refund ? '<div class="sum-row"><span>Refund</span><b>' + UI.refundBadge(refund) + '</b></div>' : '')
       + (order.payRef ? '<div class="sum-row"><span>Reference</span><b style="font-size:.85rem">' + UI.esc(order.payRef) + '</b></div>' : '')
       + '</div>'
       + '<div class="summary-card" style="position:static">'
@@ -138,6 +161,10 @@
       + '</div></aside>'
       + '</div>';
 
+    const refundBtn = view.querySelector('[data-refund-order]');
+    if (refundBtn) {
+      refundBtn.addEventListener('click', function () { UI.refundRequestFlow(order, render); });
+    }
     const support = view.querySelector('[data-support]');
     if (support) {
       support.addEventListener('click', function () {

@@ -170,7 +170,22 @@ Open **SQL Editor → New query**, paste **`supabase/cancel-schema.sql`**, and
 > get a clear error message naming this file, not a silent no-op. No new columns
 > are needed — the reason and the actor ride inside `status_history`.
 
-## Step 9 — The cross-browser demo 🎉
+## Step 9 — Refunds (30 sec)
+
+Open **SQL Editor → New query**, paste **`supabase/refund-schema.sql`**, and
+**Run**. It creates `refund_requests` — one row per order, written by the
+customer when they ask for a refund and updated by an admin who approves or
+declines it — plus its RLS policies and realtime entry.
+
+> **This one is required for refunds in cloud mode.** Refunds live in their own
+table so a customer never needs a write policy on `orders` (they can only
+*request* a refund, never decide it, and can never touch the order row).
+> Without it the demo still boots and still lets people order: the moment a
+> refund is attempted the app says so plainly — *"Refunds are not enabled on
+> the server yet — run supabase/refund-schema.sql"* — instead of pretending the
+> request was recorded.
+
+## Step 10 — The cross-browser demo 🎉
 
 **Easiest path:** double-click `start-demo.bat`. It starts the server, waits for
 it, then opens Chrome as the customer and Edge as the admin — each in its own
@@ -223,6 +238,10 @@ the sign-in page, or open `login.html?fresh=1` for a guaranteed clean start.
 |---|---|
 | Banner "running in local mode" | Check the two keys in `supabase-config.js`; check internet |
 | Console warning `promo_redemptions is missing` | Step 7 not run — one-time codes are enforced per browser only. Harmless; run `promo-schema.sql` to make them cross-device |
+| Console warning `refund_requests is missing` | Step 9 not run — refunds are unavailable in cloud mode (the request button reports it clearly) |
+| "Refunds are not enabled on the server yet" | Same as above — run `supabase/refund-schema.sql` |
+| Refund button missing on an order | The order must be **paid** and **finished** (delivered or cancelled). A live order is stopped with Cancel, not a refund. Also: one request per order, and a decision is final |
+| "That refund request no longer exists — it may already have been decided." | Two admin windows decided the same request; the second write matched no row, which the app reports instead of pretending |
 | "The server accepted the request but changed nothing — your account is not allowed to update DD-xxxx" | Step 8 not run. A customer cancelled an order in cloud mode, but `orders` only granted UPDATE to admins, so RLS filtered the write out. Run `supabase/cancel-schema.sql` |
 | Customer's cancel button is missing entirely | Only `pending` orders can be cancelled by a customer. Once it is Confirmed the kitchen is committed, so the page offers "Need help? Contact us" instead and an admin must refuse it |
 | Setup page: "relation does not exist" | Step 1 not run (or run in the wrong project) |

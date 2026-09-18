@@ -23,12 +23,18 @@
        they stay visible instead of quietly vanishing. */
     const orders = raw.filter(function (o) { return o.status !== 'cancelled'; });
     const users = S.users();
-    const revenue = orders.reduce(function (s, o) { return s + o.total; }, 0);
+    /* Refunded money is NOT revenue: the customer got the order price back, so
+       it leaves the revenue figure and is surfaced as its own number instead.
+       (payStatusOf derives 'refunded' from the order's refund record.) */
+    const notRefunded = orders.filter(function (o) { return UI.payStatusOf(o) !== 'refunded'; });
+    const revenue = notRefunded.reduce(function (s, o) { return s + o.total; }, 0);
     const customers = users.filter(function (u) { return u.role === 'customer'; });
+    const refunds = S.refundTotals ? S.refundTotals(orders) : { count: 0, amount: 0, pending: 0 };
     return {
-      orders: orders, revenue: revenue, customers: customers,
+      orders: orders, notRefunded: notRefunded, revenue: revenue, customers: customers,
       foods: S.foods().length,
       cancelled: raw.length - orders.length,
+      refunds: refunds,
       pending: orders.filter(function (o) { return o.status === 'pending'; }),
       live: orders.filter(function (o) { return o.status !== 'delivered'; })
     };
@@ -80,7 +86,7 @@
     const users = st.customers;
 
     const weekCount = weekBars(st.orders).reduce(function (s, d) { return s + d.count; }, 0);
-    const weekRev = weekBars(st.orders).reduce(function (s, d) { return s + d.revenue; }, 0);
+    const weekRev = weekBars(st.notRefunded).reduce(function (s, d) { return s + d.revenue; }, 0);
     const pendingStr = st.pending.length
       ? '<div class="pending-strip"><span class="ps-ic">' + UI.ic('clock') + '</span>'
       + '<span><b>' + st.pending.length + ' order' + (st.pending.length === 1 ? '' : 's') + ' waiting for confirmation</b><span style="display:block">Head to Orders to review and move them forward.</span></span>'
@@ -96,6 +102,12 @@
       { ic: 'utensils', cls: 'si-food', label: 'Food items', val: String(st.foods), sub: 'on the live menu' },
       st.cancelled
         ? { ic: 'x', cls: 'si-cancel', label: 'Cancelled', val: String(st.cancelled), sub: 'excluded from revenue' }
+        : null,
+      st.refunds.count
+        ? { ic: 'refresh', cls: 'si-cancel', label: 'Refunded', val: D.naira(st.refunds.amount), sub: st.refunds.count + ' order' + (st.refunds.count === 1 ? '' : 's') + ' removed from revenue' }
+        : null,
+      st.refunds.pending
+        ? { ic: 'clock', cls: 'si-pend', label: 'Refund requests', val: String(st.refunds.pending), sub: 'waiting for your decision' }
         : null
     ].filter(Boolean).map(function (c) {
       return '<div class="stat-card" data-reveal><span class="stat-ico ' + c.cls + '">' + UI.ic(c.ic) + '</span>'

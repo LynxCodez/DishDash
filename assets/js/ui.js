@@ -230,6 +230,10 @@ window.DD_UI = (function () {
      (no payStatus field, old 'transfer' key) so old localStorage data
      keeps rendering correctly. */
   function payStatusOf(o) {
+    /* A refund is a payment OUTCOME, not a stored column: an approved refund
+       is derived here so refunded money falls out of every revenue figure at
+       once (reports and the dashboard both gate on this). */
+    if (o.refund && o.refund.status === 'approved') return 'refunded';
     if (o.payStatus) return o.payStatus;
     if (o.pay === 'card') return 'paid';
     if (o.pay === 'bank_transfer' || o.pay === 'transfer') return 'awaiting_verification';
@@ -243,9 +247,18 @@ window.DD_UI = (function () {
   function payBadge(status) {
     const meta = D.PAY_STATUS[status] || { label: status || 'unknown' };
     const cls = status === 'awaiting_verification' ? 'pay-awaiting' : 'pay-' + status;
-    const icon = status === 'paid' ? 'check' : 'clock';
+    const icon = status === 'paid' ? 'check' : (status === 'refunded' ? 'refresh' : 'clock');
     return '<span class="pay-badge ' + cls + '">' + ic(icon) + esc(meta.label) + '</span>';
   }
+  /* Refund state chip — one look for 'a refund was asked for / given / refused'
+     on any order list, card or detail panel. */
+  function refundBadge(r) {
+    if (!r) return '';
+    const m = D.refundMeta(r.status) || { label: r.status, cls: 'rf-requested' };
+    const icon = r.status === 'approved' ? 'refresh' : (r.status === 'rejected' ? 'x' : 'clock');
+    return '<span class="rf-chip ' + m.cls + '">' + ic(icon) + esc(m.label) + '</span>';
+  }
+  function refundInfoOf(order) { return (order && order.refund) || null; }
 
   /* ------------------------------------------------------------
      7. Food card component
@@ -436,6 +449,38 @@ window.DD_UI = (function () {
       modal.querySelector('[data-pd-ok]').addEventListener('click', function () {
         const v = String(field.value || '').trim();
         modal.close(); resolve(v);
+      });
+    });
+  }
+
+  /* The customer's refund request: one prompt, one API call, one set of
+     messages — shared by the orders list and the tracking page so the two can
+     never drift apart. `done` runs on success so the caller can repaint. */
+  function refundRequestFlow(order, done) {
+    if (!order) return;
+    const existing = refundInfoOf(order);
+    if (existing) {
+      const m = D.refundMeta(existing.status) || { label: existing.status };
+      toast('Refund already on file', order.id + ' — ' + m.label + '.', 'info', 4600);
+      return;
+    }
+    promptDialog({
+      title: 'Ask for a refund on ' + order.id + '?',
+      msg: 'This asks DishDash to refund the full order total of ' + fmtN(order.total) + '. Support reviews every request by hand.',
+      label: 'What went wrong? (optional)',
+      placeholder: 'e.g. the food arrived cold',
+      okText: 'Send request',
+      cancelText: 'Never mind',
+      hint: 'Optional — it travels with the order so support can decide quickly. You can only ask once per order.'
+    }).then(function (reason) {
+      if (reason === null) return;
+      Promise.resolve(S.requestRefund(order.id, reason)).then(function (res) {
+        if (res && res.ok) {
+          toast('Refund requested', 'Support is reviewing ' + order.id + ' — the outcome shows here.', 'success', 5200);
+          if (typeof done === 'function') done();
+        } else {
+          toast('Could not ask for a refund', (res && res.error) || 'Please try again.', 'error', 5200);
+        }
       });
     });
   }
@@ -1236,9 +1281,10 @@ window.DD_UI = (function () {
     fmtDate, fmtDateShort, fmtTime, timeAgo, etaClock,
     logoMark, logoHTML, rootPath,
     imgCover, starRow, statusBadge, statusLabel, isTerminal, payBadge, payMethodLabel, payStatusOf,
+    refundBadge, refundInfoOf,
     foodCardHTML, emptyState, loaderHTML,
     paginationHTML, bindPagination, reveal,
-    toast, openModal, confirmDialog, promptDialog,
+    toast, openModal, confirmDialog, promptDialog, refundRequestFlow,
     cartUISync, refreshChrome, isPage, isAdminPage, currentNavPage,
     printReceipt,
     confirm: confirmDialog,
