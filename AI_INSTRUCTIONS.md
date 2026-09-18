@@ -391,6 +391,14 @@ a caller toast success for a write that returned none. The matching migration
 is `supabase/cancel-schema.sql` (a customer may flip their OWN `pending` order
 to `cancelled` and nothing else).
 
+**Promo codes are ALL one-time, and that is a policy, not a per-code flag.**
+`DD_DATA.PROMO_POLICY = { oncePerAccount: true }` is read by `checkPromo`, so
+every code — including any added later — is single-use per account
+unconditionally. Do **not** reintroduce a per-code `once` flag: the whole point
+is that a new code cannot be added without inheriting the limit. Only
+economics vary per code (`type`, `value`, `minSub`) plus the optional extra
+`firstOrderOnly` (DISHWELCOME).
+
 **Promo rules live once, in `DD_DATA.checkPromo`.** Both stores call it with
 their own predicates (`isUsed`, `hasOrders`) so a code cannot behave
 differently online and offline. A code is spent when the ORDER IS PLACED, not
@@ -502,10 +510,14 @@ screen; later pushes reuse the stored credential.
   status contract and the 0-row-UPDATE trap. **`cancel-schema.sql` must be run
   for the customer path in cloud mode** — without the policy the write is
   filtered out (the app now reports that loudly instead of faking success).
-- **One-time promo codes**: DONE — `DISHWELCOME` once-per-account and
-  first-order-only, `FAST10` repeatable, spent on order placement, released on
-  cancellation. `promo-schema.sql` is optional (degrades to per-browser
-  enforcement). Rules live once in `DD_DATA.checkPromo`; see section 4.
+- **One-time promo codes**: DONE — **updated 2026-09-18 at the owner's
+  request: every code is now single-use per account**, enforced globally by
+  `DD_DATA.PROMO_POLICY` so codes added later inherit it too (`FAST10` was
+  repeatable before this and is not any more — its docs and the FAQ/terms copy
+  were corrected in the same pass). `DISHWELCOME` additionally stays
+  first-order-only. Spent on order placement, released on cancellation.
+  `promo-schema.sql` is optional (degrades to per-browser enforcement). Rules
+  live once in `DD_DATA.checkPromo`; see section 4.
 - **Homepage hero**: DONE — single-column copy over the crossfading photo
   backdrop, four proof items (35 min / dishes / rating / free delivery). The
   right-hand collage, the floating stat chips and the dark "cinematic"

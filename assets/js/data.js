@@ -253,20 +253,30 @@ window.DD_DATA = (function () {
   };
 
   /* promo codes (demo coupons — validation + discount math lives in store.js)
-     once           → redeemable once per account (enforced in every mode)
-     firstOrderOnly → only usable before the account has a standing order
+
+     THE RULE, AND IT IS GLOBAL: every promo code is single-use per account,
+     today and for any code added later. That policy lives here in
+     PROMO_POLICY instead of as a flag on each code, so a new code is
+     one-time automatically and nobody has to remember to set anything —
+     the "forgot the flag" bug cannot happen. Store this as a per-account
+     redemption (see store.js redeemPromo) so it holds across reloads and,
+     in cloud mode, across browsers.
+
+     firstOrderOnly → an ADDITIONAL restriction: usable only before the
+     account has a standing order (DISHWELCOME).
      Redeeming a code spends it; cancelling the order that used it releases it
      again, so a customer never loses a code to an order that never happened. */
+  const PROMO_POLICY = { oncePerAccount: true };
+
   const PROMOS = {
     DISHWELCOME: {
       label: 'Welcome offer', type: 'flat', value: 1500, minSub: 0,
       desc: '₦1,500 off any order',
-      once: true, firstOrderOnly: true, welcome: true
+      firstOrderOnly: true, welcome: true
     },
     FAST10: {
       label: 'Fast 10', type: 'percent', value: 10, minSub: 5000,
-      desc: '10% off orders over ₦5,000',
-      once: false
+      desc: '10% off orders over ₦5,000'
     }
   };
 
@@ -281,7 +291,7 @@ window.DD_DATA = (function () {
     if (!key) return { ok: false, error: 'Enter a promo code to apply it.' };
     const promo = PROMOS[key];
     if (!promo) return { ok: false, error: 'That promo code isn\u2019t valid. Double-check and try again.' };
-    if (promo.once && isUsed && isUsed(key)) {
+    if (PROMO_POLICY.oncePerAccount && isUsed && isUsed(key)) {
       return { ok: false, used: true, error: key + ' is a one-time code, and this account has already used it.' };
     }
     if (promo.firstOrderOnly && hasOrders && hasOrders()) {
@@ -306,6 +316,6 @@ window.DD_DATA = (function () {
   return {
     img, naira, CATEGORIES, FOODS, GALLERY, SEED_USERS, SEED_ORDERS, STATUS_FLOW,
     CANCELLED, statusMeta, checkPromo,
-    PROMOS, CONFIG, PAY_METHODS, PAY_STATUS, DEMO_BANK, NG_BANKS, getCategory, getFood, countByCat, foodsInCat
+    PROMOS, PROMO_POLICY, CONFIG, PAY_METHODS, PAY_STATUS, DEMO_BANK, NG_BANKS, getCategory, getFood, countByCat, foodsInCat
   };
 })();

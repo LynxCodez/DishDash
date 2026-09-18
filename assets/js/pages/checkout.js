@@ -121,7 +121,7 @@
     }
     return '<p class="promo-hint">Try ' + chip('DISHWELCOME', 'for ' + D.naira(1500) + ' off your first order')
       + ', or ' + chip('FAST10', 'for 10% off orders over ' + D.naira(5000))
-      + '. One-time codes work once per account — cancelling the order they were used on releases them again.</p>';
+      + '. Every promo code is single-use per account — cancelling the order a code was used on releases it again.</p>';
   }
 
   function applyPromo() {

@@ -485,7 +485,7 @@ form is what actually lands in storage rather than whatever was typed.
 | 8 | Improved dish-adding flow incl. images/thumbnails | **Done** — drag-drop/click upload with client-side resize to a web thumbnail, data-URL stored in `foods.img` (both modes), `D.img()` passthrough for any URL, inline per-field errors, local quota guard; add/edit/delete verified end-to-end in cloud mode |
 | — | Homepage hero photo backdrop w/ crossfade + scroll fade | **Done** — 3 verified Unsplash photos crossfading 2.4s every 6.5s, cream tint for text contrast, bottom melt into page bg; reduced-motion safe; degrades to cream hero offline |
 | — | Order cancellation (customer while pending, admin refuse) | **Done** — off-flow `cancelled` terminal status with a recorded reason + actor; customer button while pending, admin refuse at any point before delivery; cancelling releases any promo code the order had spent. Run `cancel-schema.sql` for cloud mode |
-| — | One-time promo codes | **Done** — `DISHWELCOME` is one use per account and first-order-only; `FAST10` stays repeatable; cancel the order and the code comes back. Run `promo-schema.sql` for cross-device enforcement |
+| — | One-time promo codes | **Done** — **every** code is single-use per account via the global `DD_DATA.PROMO_POLICY` (new codes inherit it automatically); `DISHWELCOME` is additionally first-order-only; cancel the order and the code comes back. Run `promo-schema.sql` for cross-device enforcement |
 | — | Homepage hero: single-column layout, collage & stat chips removed | **Done** — the right-hand photo collage and the floating “Free delivery” / “12,000+ happy customers” chips are gone; free delivery moved into the proof row. A dark “cinematic” hero variant was built, **rejected by the owner and removed** — the hero is bright-only |
 | — | FAQs + Terms & conditions pages | **Done** — footer **Help** column links to `faq.html` (21 questions in six topics, live search, one-open accordion, deep links like `faq.html#cancel-order`, contact card built from `DD_DATA.CONFIG`) and `terms.html` (13 numbered sections with a sticky scroll-spy index and a demo/simulation honesty table). Both static-first: the FAQ is native `<details>`, so it still reads with JS off |
 | — | Bulk admin actions (advance many orders at once) | Not started |
@@ -528,12 +528,18 @@ single page.
   The dashboard surfaces the count separately so cancellations stay visible.
 - Cancelling **releases any promo code** the order had spent (see below).
 
-## Promo codes (one-time)
+## Promo codes (all one-time)
 
-Codes live in `DD_DATA.PROMOS` with two flags: `once` (one redemption per
-account) and `firstOrderOnly`. `DISHWELCOME` is ₦1,500 off, `once: true`,
-`firstOrderOnly: true`; `FAST10` is 10% over ₦5,000 and repeatable on purpose,
-so the difference is demonstrable side by side.
+**Every promo code is single-use per account — today and for any code added
+later.** That is a *global* rule, declared once as
+`DD_DATA.PROMO_POLICY = { oncePerAccount: true }` and enforced in
+`checkPromo`, rather than a `once` flag repeated on each code. A code added to
+`DD_DATA.PROMOS` tomorrow is therefore one-time automatically: there is no flag
+to forget, so the "new code is accidentally unlimited" bug cannot happen.
+
+Codes still declare their own economics — `DISHWELCOME` is ₦1,500 off with
+`firstOrderOnly: true` (an *extra* restriction: no standing order yet), while
+`FAST10` is 10% over ₦5,000 with no first-order condition.
 
 The rules are implemented **once**, in `DD_DATA.checkPromo(code, sub, isUsed,
 hasOrders)` — messaging and money math together — and each store hands it the
