@@ -269,9 +269,14 @@ input[type=checkbox].switch:checked::after{left:21px}
 /* The hero is a single column: copy only, over the photo backdrop. Used to be
    a 2-column grid with a photo collage on the right; the collage and its
    floating stat chips ("12,000+ happy customers") were removed on request, and
-   the free-delivery fact moved into the .hero-proof row below the CTAs. The
-   copy keeps a max-width so the headline breaks where it always did. */
-.hero-inner{position:relative;z-index:2;display:block;max-width:720px}
+   the free-delivery fact moved into the .hero-proof row below the CTAs. */
+.hero-inner{position:relative;z-index:2;display:block}
+/* The width cap belongs on .hero-copy, NOT on .hero-inner. .hero-inner is also
+   a .container (max-width:1200px; margin:0 auto) — capping it shrank that
+   element to 720px and its own auto margins then CENTRED the narrowed box, so
+   the whole hero drifted to the middle of wide screens. Left-aligning inside
+   the centred container is the original look. */
+.hero-copy{max-width:720px}
 .hero h1{font-size:clamp(2.2rem,4.6vw,3.55rem);letter-spacing:-.035em;line-height:1.08}
 /* Gradient text: use the background-IMAGE longhand, never the `background`
    shorthand. The shorthand resets background-clip to its initial value, so a

@@ -340,8 +340,13 @@ curl-checked for HTTP 200 BEFORE being committed (a dead Unsplash ID just
 silently shows nothing). If all photos fail, the hero degrades to the plain
 cream gradient — by design, do not "fix" that with a placeholder photo.
 
-**The hero is single-column and bright-only.** `.hero-inner` is a block
-(max-width 720px) holding `.hero-copy` alone, over the photo backdrop. The
+**The hero is single-column, left-aligned and bright-only.** `.hero-inner` is a
+block holding `.hero-copy` alone, over the photo backdrop. **Put the width cap
+on `.hero-copy`, never on `.hero-inner`**: `.hero-inner` is also a `.container`
+(`max-width:1200px; margin:0 auto`), so capping that element narrows it and its
+own auto margins then CENTRE the narrowed box — the hero silently drifted to
+the middle of wide screens that way, and the owner noticed before any test did.
+The right shape is a full-width container with a max-width child pinned left. The
 right-hand photo collage (`.hm-main` / `.hm-f1` / `.hm-f2`), the floating stat
 chips (`.float-chip`) and the `@keyframes floaty`/`spin` they used were all
 REMOVED on the owner's request on 2026-09-18; "Free delivery on orders above

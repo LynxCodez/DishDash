@@ -334,8 +334,13 @@ table — Unsplash IDs verified live before shipping) that **crossfade every
   right, echoing the darkened-hero pattern of the reference sites but in
   DishDash's palette. Below 1020 px the text spans full width, so the tint
   switches to a stronger uniform top→bottom wash.
-- `.hero-inner` — a **single column**: the copy only, capped at 720 px, with
-  the photo backdrop breathing to its right. It used to be a 2-column grid
+- `.hero-inner` — a **single column**: the copy only, **left-aligned**, with
+  the photo backdrop breathing to its right. The 720 px width cap lives on
+  `.hero-copy`, *not* on `.hero-inner`: `.hero-inner` is also a `.container`
+  (`max-width:1200px; margin:0 auto`), so capping it shrinks the element and
+  its own auto margins centre the narrowed box — which is exactly how the hero
+  ended up drifting to the middle of wide screens once the collage was
+  removed. It used to be a 2-column grid
   with a photo collage (burger / pizza / chicken cards) and two floating
   stat chips on the right; that whole right-hand block was **removed on
   request** — the collage said nothing the images above and below don't
