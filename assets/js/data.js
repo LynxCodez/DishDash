@@ -191,6 +191,62 @@ window.DD_DATA = (function () {
     return STATUS_FLOW.find(function (s) { return s.key === key; }) || (key === 'cancelled' ? CANCELLED : null);
   }
 
+  /* ------------------------------------------------------------
+     ETA by status — the arrival estimate MOVES with the order
+     ------------------------------------------------------------
+     An ETA is not one promise frozen at checkout. Each stage of the flow
+     carries the minutes still needed FROM THE MOMENT THE ORDER ENTERED THAT
+     STAGE, so when an admin advances an order in the console the customer's
+     "arriving by" clock moves with it: send it out for delivery and the
+     customer is told 12 minutes, not the 35 promised at checkout.
+
+     The anchor is the timestamp already recorded in statusHistory (the same
+     field the timeline reads, stored and synced in both modes). That makes the
+     estimate DERIVED — there is no second copy of the truth to keep in step,
+     and no column to migrate.
+
+     'pending' is deliberately absent from ETA_MIN: before the kitchen confirms
+     anything, the promise really is the one made at checkout, so the customer
+     keeps the original `order.etaMin` measured from `placedAt`. That also means
+     an untouched order behaves exactly as it did before this existed.
+
+     Anything unrecognised (a hand-edited row, a future status) falls back to
+     that same checkout promise, so an ETA is always answered.            */
+  const ETA_MIN = { confirmed: 30, preparing: 22, outfordelivery: 12, delivered: 0 };
+
+  /* When the order entered the status it is in now (latest matching history
+     entry; falls back to placedAt for rows with no history). */
+  function statusEnteredAt(order) {
+    if (!order) return null;
+    let best = null;
+    (order.statusHistory || []).forEach(function (h) {
+      if (!h || h.status !== order.status || !h.at) return;
+      if (!best || Date.parse(h.at) > Date.parse(best)) best = h.at;
+    });
+    return best || order.placedAt || null;
+  }
+
+  /* { status, minutes, enteredAt, at, arrived } — or null where an ETA makes no
+     sense (a cancelled order). `at` is an ISO instant; format it with
+     UI.clockAt(). */
+  function etaFor(order) {
+    if (!order || order.status === 'cancelled') return null;
+    const key = order.status;
+    const minutes = Object.prototype.hasOwnProperty.call(ETA_MIN, key)
+      ? ETA_MIN[key]
+      : Math.max(1, Number(order.etaMin) || CONFIG.avgDeliveryMin);
+    const enteredAt = statusEnteredAt(order);
+    const base = Date.parse(enteredAt);
+    if (isNaN(base)) return null;
+    return {
+      status: key,
+      minutes: minutes,
+      enteredAt: enteredAt,
+      at: new Date(base + minutes * 60000).toISOString(),
+      arrived: key === 'delivered'
+    };
+  }
+
   // payment methods (simulation only — no real gateway)
   const PAY_METHODS = [
     { key: 'card',         label: 'Card payment',    sub: 'Visa · Mastercard · Verve (demo — no card needed)',   emoji: '💳' },
@@ -330,7 +386,7 @@ window.DD_DATA = (function () {
 
   return {
     img, naira, CATEGORIES, FOODS, GALLERY, SEED_USERS, SEED_ORDERS, STATUS_FLOW,
-    CANCELLED, statusMeta, checkPromo,
+    CANCELLED, statusMeta, ETA_MIN, etaFor, statusEnteredAt, checkPromo,
     PROMOS, PROMO_POLICY, CONFIG, PAY_METHODS, PAY_STATUS, REFUND_STATUS, refundMeta,
     DEMO_BANK, NG_BANKS, getCategory, getFood, countByCat, foodsInCat
   };

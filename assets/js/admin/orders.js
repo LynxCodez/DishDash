@@ -185,6 +185,7 @@
       + (o.pay === 'bank_transfer' ? '<p style="font-size:.78rem;color:var(--muted);margin-top:6px">Academic demo: the destination account is simulated, but the customer\u2019s account number was checked with the real CBN NUBAN rule.</p>' : '')
       + refundAdminHTML(o.refund)
       + '<div class="kv"><b>Placed</b><span>' + UI.fmtDate(o.placedAt) + '</span></div>'
+      + '<div class="kv"><b>Delivery</b><span>' + esc(UI.etaSummary(o)) + '</span></div>'
       + '<h4 style="margin-top:16px">' + UI.ic('clock') + ' Status timeline</h4>'
       + '<div class="detail-items">' + history.map(function (h) {
         const who = h.status === 'cancelled'
@@ -332,8 +333,14 @@
           if (yes) {
             Promise.resolve(S.updateOrderStatus(o.id, next)).then(function () {
               UI.toast('Order advanced', o.id + ' is now ' + nextLabel.toLowerCase() + '.');
-              modal.close();
               render();
+              /* Re-open on the updated order: this panel is where the delivery
+                 estimate is shown, and it now moves with the status — so the
+                 admin watches the clock change as they walk the order down the
+                 flow, and can keep going without re-opening it. */
+              const updated = S.getOrder(o.id);
+              modal.close();
+              if (updated) openDetail(updated);
             });
           }
         });

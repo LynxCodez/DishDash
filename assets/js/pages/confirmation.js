@@ -19,7 +19,10 @@
       return;
     }
     const payLabel = UI.payMethodLabel(order.pay) + (order.pay === 'card' ? ' (simulated)' : '');
-    const eta = UI.etaClock(order.placedAt, order.etaMin || D.CONFIG.avgDeliveryMin);
+    /* Right after checkout this is the promise made at checkout (status is
+       'pending'); if the order has since moved on, it shows the stage's own
+       estimate — the same rule the tracking page uses. */
+    const eta = D.etaFor(order);
 
     wrap.innerHTML = '<div class="confirm-wrap">'
       + '<div class="big-check">' + UI.ic('check') + '</div>'
@@ -29,7 +32,8 @@
       + '<div class="order-no">' + UI.ic('receipt') + 'Order ' + UI.esc(order.id) + '</div>'
       + '<div class="eta-strip">'
       + '<span class="eta-ic">' + UI.ic('clock') + '</span>'
-      + '<span><b>Estimated delivery by ' + eta + '</b><span>Average ' + (order.etaMin || D.CONFIG.avgDeliveryMin) + ' minutes from order</span></span>'
+      + '<span><b>' + (eta ? 'Estimated delivery by ' + UI.clockAt(eta.at) : 'This order was cancelled') + '</b>'
+      + '<span>' + (eta ? 'About ' + eta.minutes + ' minutes from order' : 'See My orders for the full history') + '</span></span>'
       + '<a class="btn btn-primary" href="tracking.html?id=' + encodeURIComponent(order.id) + '">' + UI.ic('truck') + 'Track order</a>'
       + '</div>'
       + '<div class="confirm-card" style="text-align:left">'

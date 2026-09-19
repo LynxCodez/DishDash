@@ -21,10 +21,14 @@
     (order.statusHistory || []).forEach(function (h) {
       if (!reached[h.status]) reached[h.status] = h.at;
     });
-    const etaMin = order.status === 'delivered' ? 0 : (order.etaMin || D.CONFIG.avgDeliveryMin);
-    const etaAt = Date.parse(order.placedAt) + etaMin * 60000;
-    const remaining = Math.round((etaAt - Date.now()) / 60000);
-    const showEta = !cancelled && order.status !== 'delivered' && remaining > 0;
+    /* The estimate is derived from the CURRENT stage (DD_DATA.etaFor), so when
+       an admin advances the order — in another browser, live — this moves with
+       it: out for delivery means roughly 12 minutes, not the 35 promised at
+       checkout. An overdue order keeps its strip and says "any minute now"
+       instead of silently losing the estimate altogether. */
+    const eta = D.etaFor(order);
+    const remaining = eta ? Math.round((Date.parse(eta.at) - Date.now()) / 60000) : 0;
+    const showEta = !cancelled && !!eta && !eta.arrived;
     return '<div class="timeline">' + D.STATUS_FLOW.map(function (st, i) {
       // cancelled: mark exactly what the order actually reached, not a
       // position on a journey it never finished
@@ -35,10 +39,14 @@
       const tClass = done ? ' done' : (isCurrent ? ' current' : ' todo');
       let extra = '';
       if (isCurrent && showEta) {
+        const toGo = remaining >= 60
+          ? 'about ' + Math.floor(remaining / 60) + 'h ' + (remaining % 60) + 'm to go'
+          : (remaining > 1 ? 'about ' + remaining + ' minutes to go'
+            : (remaining === 1 ? 'about a minute to go' : 'any minute now'));
         extra = '<div class="eta-strip" style="margin-top:12px;margin-bottom:0">'
           + '<span class="eta-ic">' + UI.ic('clock') + '</span>'
-          + '<span><b>Arriving by ' + UI.etaClock(order.placedAt, etaMin) + '</b>'
-          + '<span>' + (remaining >= 60 ? 'about ' + Math.round(remaining / 60) + 'h ' + (remaining % 60) + 'm to go' : (remaining > 1 ? 'about ' + remaining + ' minutes to go' : 'your rider is almost there')) + '</span></span></div>';
+          + '<span><b>Arriving by ' + UI.clockAt(eta.at) + '</b>'
+          + '<span>' + toGo + '</span></span></div>';
       }
       return '<div class="tl-step' + tClass + '" data-reveal>'
         + '<span class="tl-dot">' + UI.ic(icon) + '</span>'

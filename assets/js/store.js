@@ -292,10 +292,17 @@ window.DD_STORE = (function () {
     const now = Date.now();
     list.forEach(function (o) {
       if (o.source !== 'app' || o.status === 'delivered') return;
-      const etaAt = Date.parse(o.placedAt) + (o.etaMin || D.CONFIG.avgDeliveryMin) * 60000;
-      if (now >= etaAt) {
+      /* The SAME status-aware rule the customer's page shows (DD_DATA.etaFor):
+         the promise in force is the current stage's, so an order sent out for
+         delivery completes on its own 12 minutes rather than on the 35 promised
+         at checkout. Displaying one deadline while auto-completing on another
+         is how a tracker ends up announcing an arrival that already happened. */
+      const eta = D.etaFor(o);
+      if (!eta || eta.arrived) return;
+      const etaAt = Date.parse(eta.at);
+      if (!isNaN(etaAt) && now >= etaAt) {
         o.status = 'delivered';
-        o.statusHistory.push({ status: 'delivered', at: new Date(etaAt).toISOString() });
+        o.statusHistory.push({ status: 'delivered', at: eta.at });
         changed = true;
       }
     });

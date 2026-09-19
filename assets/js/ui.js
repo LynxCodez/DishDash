@@ -159,6 +159,24 @@ window.DD_UI = (function () {
     const d = new Date(Date.parse(iso) + minutes * 60000);
     return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
   }
+  /* Clock time of an instant ("14:35"). The status-aware ETA below hands back
+     an ISO instant, so this is what formats it. */
+  function clockAt(iso) {
+    const d = new Date(Date.parse(iso));
+    if (isNaN(d.getTime())) return '—';
+    return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  }
+
+  /* ONE arrival line for every surface that shows an estimate — the console's
+     order detail, the printable receipt and (via the same DD_DATA.etaFor) the
+     customer's tracking page. Because they all read the one rule, they cannot
+     disagree with each other as an admin advances an order. */
+  function etaSummary(order) {
+    const e = D.etaFor(order);
+    if (!e) return '—';
+    if (e.arrived) return 'Delivered at ' + clockAt(e.at);
+    return 'Arriving by ' + clockAt(e.at);
+  }
 
   /* ------------------------------------------------------------
      3. Logo mark + wordmark
@@ -509,7 +527,6 @@ window.DD_UI = (function () {
     const w = window.open('', '_blank', 'width=760,height=920');
     if (!w) { toast('Popup blocked', 'Allow pop-ups for DishDash to print your receipt.', 'error', 4200); return; }
 
-    const etaMin = o.etaMin || D.CONFIG.avgDeliveryMin;
     const payStatus = payStatusOf(o);
     const payMeta = D.PAY_STATUS[payStatus] || { label: payStatus || '—' };
     const method = payMethodLabel(o.pay) + (o.pay === 'card' ? ' (simulated)' : '');
@@ -581,7 +598,7 @@ window.DD_UI = (function () {
       + '<span class="chip">' + esc(statusLabel(o.status)) + '</span>'
       + '<span class="chip pay' + (payStatus === 'awaiting_verification' ? ' await' : '') + '">' + esc(payMeta.label) + '</span></div>'
       + '<div class="meta"><span><b>Placed:</b> ' + esc(fmtDate(o.placedAt)) + '</span>'
-      + '<span><b>Estimated delivery:</b> by ' + esc(etaClock(o.placedAt, etaMin)) + ' (avg ' + etaMin + ' min)</span></div>'
+      + '<span><b>Delivery:</b> ' + esc(etaSummary(o)) + '</span></div>'
       + '<table><thead><tr><th>Item</th><th class="r">Qty</th><th class="r">Amount</th></tr></thead><tbody>' + rows + '</tbody></table>'
       + '<div class="sums">'
       + '<div class="r"><span>Subtotal</span><b>' + fmtN(o.sub) + '</b></div>'
@@ -1278,7 +1295,7 @@ window.DD_UI = (function () {
 
   return {
     esc, ic, fmtN, initials, qs, getParam, go, debounce, catOf,
-    fmtDate, fmtDateShort, fmtTime, timeAgo, etaClock,
+    fmtDate, fmtDateShort, fmtTime, timeAgo, etaClock, clockAt, etaSummary,
     logoMark, logoHTML, rootPath,
     imgCover, starRow, statusBadge, statusLabel, isTerminal, payBadge, payMethodLabel, payStatusOf,
     refundBadge, refundInfoOf,
