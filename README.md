@@ -107,6 +107,7 @@ dishdash/
     ├── img/favicon.svg
     └── js/
         ├── vendor/jquery-3.7.1.min.js
+        ├── boot.js                 page loading overlay — loads first, before CSS
         ├── data.js                 sample data only (foods, categories, seeds)
         ├── store.js                state + persistence (THE data boundary —
         │                           localStorage locally, Supabase in cloud
@@ -122,6 +123,8 @@ supabase/
 ├── pay-account-schema.sql    verified paying-account snapshot on orders
 ├── promo-schema.sql          one-time promo redemption, per account
 ├── cancel-schema.sql         RLS policy letting a customer cancel their own order
+├── refund-schema.sql         refund requests (table + RLS + realtime)
+├── realtime-schema.sql      publishes profiles (and the rest) to Realtime
 └── (open setup-demo.html to seed everything from the browser)
 ```
 
@@ -144,6 +147,56 @@ Layering rules:
 - **ui.js** — shared components & chrome; jQuery drives the interaction layer
   (menus, drawers, toasts, modal transitions, animations); the rest is vanilla.
 - **pages/** — thin per-page controllers.
+- **boot.js** — the page loading overlay (below). Loaded from `<head>` on every
+  page, ahead of the stylesheets.
+
+### Live updates across browsers
+
+In cloud mode the store opens one Supabase Realtime channel **per table**
+(`dd-live-orders`, `dd-live-foods`, …) and re-reads on every change, so pages
+never poll.
+
+That per-table split is load-bearing, not tidiness. Supabase Realtime refuses a
+subscription naming a table that is missing from the `supabase_realtime`
+publication — and refuses it **silently**: the channel still reports `joined`,
+`subscribe()` still reports `SUBSCRIBED`, nothing is logged, and **every other
+binding on that channel goes quiet with it**. The app used to subscribe to
+`orders`, `foods`, `categories`, `refund_requests`, `profiles` and `reviews` on
+*one* channel, and `profiles` had never been published (see
+`realtime-schema.sql`). So order updates arrived nowhere: the customer's tracking
+page and the admin console both stood still, while their own binding was
+perfectly valid. Isolating each table means a table that cannot be subscribed can
+only ever cost its own channel.
+
+Two rules that came out of the same live-verification pass:
+
+- **A signed-out browser must not wipe the order cache.** `pullOrders()` wrote
+  whatever the server returned; with no session RLS returns an empty list, so
+  every page showed zero orders and no error. It now returns early when there is
+  no session, and a deliberate sign-out clears the cache itself.
+- **Channels are rebuilt when the signed-in identity changes — and only then.**
+  A new session means a new token, but tearing channels down mid-join on every
+  boot is what filled the console with *"WebSocket closed before the connection
+  was established"*.
+
+### Page loading overlay
+
+`assets/js/boot.js` is the first script on every page, placed **before** the
+stylesheets so it is not blocked by them. It paints a full-screen overlay in the
+page's own colour with a spinner, then removes itself and its `<style>` node once
+the document is parsed — bounded by a short cloud-sync wait and a hard cap, so it
+can never trap the page.
+
+Two deliberate choices:
+
+- It releases on `DOMContentLoaded`, **not** `window.load`. `load` waits for every
+  Unsplash dish photo, and a spinner that lingers while images stream in makes a
+  fast site feel slow. The overlay covers the parse, not the photography.
+- The spinner fades in after ~180ms, so a fast page never flashes one at you, and
+  `prefers-reduced-motion` swaps the rotation for a pulse.
+
+It is self-contained — own inline CSS, no extra request — and uses the admin
+background for URLs under `/admin/`.
 
 ## Reviews & feedback
 
@@ -317,6 +370,11 @@ All time / Last 7 days / Last 30 days / This month.
   hour would silently shift every "peak" by an hour. `lagosParts()` in
   `reports.js` converts via `Intl.DateTimeFormat` with an explicit timezone —
   an order placed 23:30 UTC on a Wednesday lands in Thursday 00:30, correctly.
+- **Every heatmap square is a button.** Click one to list the orders behind that
+  weekday+hour — customer, status, total — with each row linking straight into
+  the console's order detail. The modal reports the paid total for the slot; an
+  empty square says so in a toast instead of opening an empty dialog. They were
+  inert `<div>`s with a tooltip before, which is why clicking them did nothing.
 - **Export CSV** downloads the filtered orders (BOM-prefixed so Excel reads
   the ₦ sign; fields quoted per RFC 4180 when they contain commas or quotes).
 
@@ -489,6 +547,12 @@ form is what actually lands in storage rather than whatever was typed.
 | — | Homepage hero: single-column layout, collage & stat chips removed | **Done** — the right-hand photo collage and the floating “Free delivery” / “12,000+ happy customers” chips are gone; free delivery moved into the proof row. A dark “cinematic” hero variant was built, **rejected by the owner and removed** — the hero is bright-only |
 | — | FAQs + Terms & conditions pages | **Done** — footer **Help** column links to `faq.html` (21 questions in six topics, live search, one-open accordion, deep links like `faq.html#cancel-order`, contact card built from `DD_DATA.CONFIG`) and `terms.html` (13 numbered sections with a sticky scroll-spy index and a demo/simulation honesty table). Both static-first: the FAQ is native `<details>`, so it still reads with JS off |
 | — | Refund system (customer requests, admin decides) | **Done** — customer asks on a paid, finished order (full total, one request per order, decision final); admin approves or declines from the order detail or the **Refunds** tab, with a note the customer sees. Approved refunds leave revenue (dashboard + reports net them out; the refunded figure is reported separately) and flip the payment badge to Refunded. Stored in its own `refund_requests` table so customers never write to `orders` — run `refund-schema.sql` for cloud mode |
+| — | Delivery ETA follows the order status | **Done** — `DD_DATA.etaFor()` derives the arrival time from the stage the order actually reached (30/22/12 min after Confirmed/Preparing/Out for delivery, the real instant once Delivered), so advancing an order in the console moves the customer's clock. Verified live: pending “03:55 / 34 min” became “03:35 / 11 min” the moment the order went out for delivery, with no refresh. Nothing stored, no migration |
+| — | Page loading spinner on every page | **Done** — `boot.js` overlay released on parse (not `window.load`), self-contained CSS, admin-aware background, reduced-motion safe |
+| — | Live updates fixed (customer tracking + admin console) | **Done** — root cause was one realtime channel carrying `orders` *and* the unpublished `profiles`, which silently killed every binding on it. One channel per table now, and `realtime-schema.sql` publishes `profiles`. Verified live: an INSERT and a DELETE each pulled and repainted the admin table with no refresh |
+| — | Admin customer list showing every customer on load | **Done** — `S.users()` now reads the cloud shadow. The old module cache was assigned *after* the broadcast meant to render it, and its other assignment sat in a `DOMContentLoaded` listener registered after that event had already fired |
+| — | Peak-hours heatmap squares | **Done** — each square is a real button listing that hour's orders (keyboard-accessible, empty-slot message). Previously decorative with a tooltip |
+| — | Sticky menu toolbar overlapping content | **Done** — the header's `position:sticky` had **zero** travel inside its own `#ddHeader` wrapper, so the header scrolled away and left a 72px band of page showing above the pinned toolbar. The wrapper is now the sticky element and the toolbar is opaque |
 | — | Bulk admin actions (advance many orders at once) | Not started |
 | — | Push-notification simulation on status change | Not started |
 | — | Admin analytics: revenue by method, AOV, peak-hours heatmap | **Done** — all three shipped with the Reports page (item 5) |
@@ -543,6 +607,45 @@ into an order row as stale state.
 Administrators advance orders in the admin console; the customer’s tracking
 page updates live — across tabs in local mode, and across browsers/devices in
 cloud mode via Supabase realtime.
+
+### Delivery ETA moves with the status
+
+An arrival estimate is not one promise frozen at checkout: **each stage carries
+the minutes still needed from the moment the order entered that stage**, so
+advancing an order in the console moves the customer’s clock. Measured live, one
+order walked end to end:
+
+| Stage | Shown to the customer | Derived from |
+|---|---|---|
+| Pending | Arriving by 03:43 | `placedAt` + the checkout promise (35 min) |
+| Confirmed at 03:09 | Arriving by 03:39 | confirmed + 30 min |
+| Preparing at 03:11 | Arriving by 03:33 | preparing + 22 min |
+| Out for delivery at 03:14 | Arriving by 03:26 | out-for-delivery + 12 min |
+| Delivered at 03:18 | **Delivered at 03:18** | the actual arrival instant |
+
+The rule lives once, in `DD_DATA.etaFor(order)` (`ETA_MIN` holds the per-stage
+minutes). It is **derived from `statusHistory`, not stored**: the anchor is the
+timestamp of the entry for the current status, so there is no second copy of the
+truth to keep in step and no column to migrate — and the identical answer comes
+out of local mode and cloud mode, because both have the history.
+
+Two consequences worth knowing:
+
+- **`pending` keeps the checkout promise.** Before the kitchen confirms
+  anything, the honest answer is still the one given at checkout, so
+  `order.etaMin` measured from `placedAt` is used. An untouched order therefore
+  behaves exactly as it did before.
+- **The auto-completion rule uses the same function.** A locally-placed order
+  whose current stage’s promise has expired flips to `delivered` — displaying one
+  deadline while completing on another is how a tracker ends up announcing an
+  arrival that already happened. (In cloud mode nothing auto-completes; an admin
+  advances it.)
+
+An order that is legitimately overdue keeps its strip and says *“any minute
+now”* rather than losing the estimate altogether. Every ETA surface — the
+tracking page, the confirmation page, the console’s order detail and the
+printable receipt — reads that one function, so they cannot contradict each
+other.
 
 ### Cancellation
 

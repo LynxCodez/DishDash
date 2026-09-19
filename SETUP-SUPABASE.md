@@ -185,7 +185,28 @@ table so a customer never needs a write policy on `orders` (they can only
 > the server yet — run supabase/refund-schema.sql"* — instead of pretending the
 > request was recorded.
 
-## Step 10 — The cross-browser demo 🎉
+## Step 10 — Live updates across browsers (30 sec)
+
+Open **SQL Editor → New query**, paste **`supabase/realtime-schema.sql`**, and
+**Run**. It adds the tables the app listens to to the `supabase_realtime`
+publication — `profiles` above all, which was missing.
+
+> **Why this matters more than it looks.** Supabase Realtime refuses a
+> subscription that names a table which is not published, and it does so
+> **silently**: the channel still reports `joined`, `subscribe()` still reports
+> SUBSCRIBED, nothing appears in the console — and every other table on that same
+> channel goes quiet with it. The app used to subscribe to `profiles` on the same
+> channel as `orders`, so order updates never arrived anywhere: the customer's
+> tracking page and the admin console both stood still. The app now gives every
+> table **its own channel**, so a missing publication entry can only cost that
+> one table — but running this file is what makes the admin's customer list
+> update live too.
+>
+> The file is idempotent and safe to re-run. It prints the resulting list; expect
+> six rows: `categories`, `foods`, `orders`, `profiles`, `refund_requests`,
+> `reviews`.
+
+## Step 11 — The cross-browser demo 🎉
 
 **Easiest path:** double-click `start-demo.bat`. It starts the server, waits for
 it, then opens Chrome as the customer and Edge as the admin — each in its own
@@ -247,7 +268,9 @@ the sign-in page, or open `login.html?fresh=1` for a guaranteed clean start.
 | Setup page: "relation does not exist" | Step 1 not run (or run in the wrong project) |
 | Login: "profile row is missing" | Step 1 trigger missing — re-run schema.sql |
 | "Only admins can change roles" on promote | An admin already exists; sign in as admin@dishdash.ng instead |
-| Orders appear only after refresh | Realtime blocked — check the SQL ran the publication lines (end of schema.sql) |
+| Orders appear only after refresh | Realtime blocked. Check the publication: `select tablename from pg_publication_tables where pubname = 'supabase_realtime'` should list six tables. If one the app listens to is missing, run **Step 10** (`realtime-schema.sql`). Note that a table missing from the publication does not raise an error — it silently takes every other table on its channel down with it, which is what happened with `profiles` |
+| Live updates worked, then stopped mid-demo | Session token rotated. The store rebuilds its subscriptions when the signed-in identity changes; if it recurs, check `supabase/realtime-schema.sql` (Step 10) is applied |
+| Admin customer list is empty until I type a name | Fixed — the page reads the cloud shadow now. If it recurs, `pullUsers()` is failing: check the admin's `profiles` SELECT policy |
 | Nobody is asked to verify their email | `verification-schema.sql` not run — see Step 5 |
 | "Email verification is not enabled on the server yet" | Same as above — the RPC functions are missing |
 | "function digest(text, unknown) does not exist" | The database has functions from an older file version — re-paste and run the CURRENT `verification-schema.sql` |

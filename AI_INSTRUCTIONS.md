@@ -125,7 +125,7 @@ There is no `npm test`. The established verification pattern is:
   editing the file does nothing to a database that already ran the old
   version. This bit us once: a runtime crash (`digest() missing`) lived only
   in the DB while the file looked correct.
-- Three SQL files exist and are idempotent/re-runnable:
+- The SQL migrations are idempotent and re-runnable. The full set:
   - `supabase/schema.sql` — core tables, RLS, `protect_role_change()`
     trigger, realtime publications.
   - `supabase/reviews-schema.sql` — reviews + feedback + RLS.
@@ -134,6 +134,14 @@ There is no `npm test`. The established verification pattern is:
     `mark_email_verified()` RPCs, `protect_verification_flag()` trigger).
   - `supabase/pay-account-schema.sql` — item 3: adds `orders.pay_account`
     (jsonb) for the customer's verified paying-account snapshot.
+  - `supabase/promo-schema.sql` — one-time promo redemption, per account.
+  - `supabase/cancel-schema.sql` — the narrow policy letting a customer
+    cancel their own `pending` order.
+  - `supabase/refund-schema.sql` — `refund_requests` (table + RLS + realtime).
+  - `supabase/realtime-schema.sql` — publishes `profiles` (and re-asserts the
+    rest) to `supabase_realtime`. **Required for live updates**: a table that
+    is not published does not merely fail to stream, it silently kills every
+    other table sharing its channel (section 4).
 
 - **`supabase-config.js` holds the only two values in this repo that an AI
   cannot regenerate** (project URL + anon key). Cloud mode needs both; with an
@@ -427,6 +435,80 @@ exactly the demo setup). Cloud persistence is `supabase/promo-schema.sql` and
 is optional: a missing table is detected and the app degrades to the per-browser
 record instead of failing checkout.
 
+**The delivery ETA is DERIVED from the order status — keep it that way.**
+`DD_DATA.etaFor(order)` is the one rule: each stage carries the minutes still
+needed **from the moment the order entered that stage** (`ETA_MIN` =
+confirmed 30, preparing 22, out-for-delivery 12, delivered 0), anchored on the
+matching `statusHistory` timestamp. That is what makes the customer's clock move
+when an admin advances an order — verified live: pending "Arriving by 03:55 / 34
+minutes" became "Arriving by 03:35 / 11 minutes" the instant the order went out
+for delivery, with no refresh. Do **not** reintroduce `placedAt + etaMin` math in
+a page: it is exactly the bug this replaced (an order sent out for delivery kept
+quoting the 35 minutes promised at checkout), and `grep placedAt.*etaMin` should
+never come back. `pending` legitimately keeps `order.etaMin` from `placedAt`,
+because before the kitchen confirms anything the checkout promise is the honest
+answer. The local auto-completion in `store.js orders()` reads the SAME function
+— showing one deadline while completing on another is how a tracker announces an
+arrival that already happened.
+
+**Realtime: ONE channel per table — never bundle them.** `subscribeRealtime()`
+in `store.js` opens a channel per table (`dd-live-orders`, `dd-live-foods`, …).
+This is not cosmetic. Supabase Realtime refuses a subscription naming a table
+missing from the `supabase_realtime` publication, and it fails **silently**: the
+channel still reports `joined`, `subscribe()` still reports `SUBSCRIBED`, nothing
+is logged — and **every other binding on that channel goes quiet with it**. The
+app used to put `orders`, `foods`, `categories`, `refund_requests`, `profiles`
+and `reviews` on one channel; `profiles` had never been published
+(`supabase/realtime-schema.sql` fixes it), so order updates died everywhere — the
+customer's tracking page and the admin console both froze. Do **not** merge the
+channels back into one "cleaner" subscription, and when you add a table add it to
+`LIVE_TABLES` **and** to `realtime-schema.sql`.
+
+**Realtime deliverability cannot be judged from the client.** A dead
+subscription looks exactly like a live one — same `joined`, same `SUBSCRIBED`, no
+error. The only honest test is to make a REAL change and watch whether a pull
+follows. Postgres skips `pgoutput` messages for unchanged tuples, so a no-op
+`update` writing the same value proves **nothing** (that mistake sent this
+investigation down a false trail for several rounds). Use a single-binding probe
+channel on the same client as the control.
+
+**`S.users()` must read the cloud shadow.** It returns
+`Y._shadow.read('users', [])`, which `pullUsers()` fills *before* it broadcasts
+`'users'`. A module-level cache looks tidier and is exactly the bug it replaced:
+the assignment ran in a `.then()` AFTER the broadcast meant to render it, so the
+console showed "0 of 0 customers" until the admin typed in the search box — and
+the other assignment lived in a `DOMContentLoaded` listener registered from
+`install()`, i.e. after that event had already fired, so it never ran at all.
+
+**`pullOrders()` must keep its no-session guard.** With no session RLS answers
+with an empty list, and writing that over the cache is how a signed-out or
+expired browser showed zero orders with no error anywhere. It returns early now;
+`S.logout()` is what clears the cache, deliberately.
+
+**The boot loader: `boot.js` goes in `<head>`, before the stylesheets** (only
+`setup-demo.html` is deliberately excluded — a diagnostic page, not app UI). It
+is self-contained so it can paint before CSS resolves, and it releases on
+`DOMContentLoaded` — NOT `window.load`, which waits for every Unsplash photo. Add
+the one-line script tag to any new page or that page flashes white while the
+others don't.
+
+**`#ddHeader` is the sticky element, not `.site-header`.** The header markup is
+injected into that empty wrapper, and a sticky child can only travel inside its
+own containing block — a wrapper whose height equals the header's gives it
+**zero** travel. The header then scrolls away while the menu toolbar stays pinned
+at `top:72px`, leaving a 72px band of raw page scrolling through above it, which
+is what "the search dishes bar is overlapping the page" turned out to be. Keep
+`#ddHeader{position:sticky;top:0;z-index:60}`, keep `.toolbar`'s offset in sync
+with the header height (72px desktop, 64px under 480px), and keep that toolbar
+**opaque** — translucent pinned bars over dish photography read as a rendering
+glitch.
+
+**The peak-hours heatmap squares are buttons.** Clicking one lists the orders
+behind that weekday+hour, reusing the range filter stashed by the last render
+(`state.slotOrders`). Keep them `<button>`s with `aria-label`s — they were inert
+`div`s with a `title`, which is why the admin reasonably asked whether clicking
+was supposed to work.
+
 ## 5. Conventions
 
 - Vanilla JS, ES5-ish style, no modules, no transpile: each page's controller
@@ -509,6 +591,26 @@ screen; later pushes reuse the stored credential.
   client-side resize → data-URL in `foods.img`, `D.img()` passthrough, inline
   field errors, local quota guard, cloud add/edit/delete + menu render all
   proven in the browser. See section 4 ("Foods `id`" and "Dish images").
+- **Delivery ETA follows the order status**: DONE and live-verified
+  (2026-09-19, cloud mode) — `DD_DATA.etaFor` (one rule, see section 4), used by
+  the tracking strip, the confirmation page, the console's order detail
+  (new **Delivery** row) and the printable receipt. The admin's detail panel
+  **re-opens itself after an advance** so the moved estimate is visible without
+  re-opening it — read the new `statusHistory` anchor to understand why that is
+  safe. The FAQ answer "How long does delivery take?" was rewritten in the same
+  pass (it used to claim the estimate was recalculated from placement only).
+- **Live updates, loading spinner, customer list, heatmap, sticky toolbar**:
+  DONE and live-verified (2026-09-19, cloud mode). Root cause of the broken
+  live updates was **one** realtime channel carrying `orders` *and* the
+  unpublished `profiles`; each table now has its own channel and
+  `realtime-schema.sql` publishes `profiles` (section 4 has the full contract).
+  `assets/js/boot.js` is now the first script on all 21 pages. `S.users()`
+  reads the cloud shadow. Heatmap squares are buttons. `#ddHeader` — not
+  `.site-header` — carries the sticky positioning. Verified in the browser:
+  INSERT and DELETE each propagated and repainted the admin orders table, the
+  customers page rendered 11 rows on first paint with an empty search box, a
+  heatmap square opened its orders, and the loader painted during parse and
+  cleaned itself up.
 - **Help pages (FAQs + terms)**: DONE (2026-09-18) — `faq.html` (21
   questions, six topics, live search, one-open accordion, deep links, contact
   card from `DD_DATA.CONFIG`) and `terms.html` (13 numbered sections, sticky
