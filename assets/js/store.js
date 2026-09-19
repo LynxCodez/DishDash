@@ -1816,9 +1816,14 @@ window.DD_STORE_SYNC = (function () {
   async function pullOrders() {
     const c = state.client;
     const u = await currentUser();
+    /* With no session RLS answers with an empty list, and writing that empty
+       list over the cache is how a signed-out or expired session left every
+       page showing zero orders. Keep what we have — a deliberate sign-out
+       clears the cache explicitly (see the cloud adapter's logout). */
+    if (!u) return [];
     let q = c.from('orders').select('*').order('placed_at', { ascending: false }).limit(500);
     // RLS already scopes this; the filter is a belt-and-braces for customers
-    if (u && u.role !== 'admin') q = q.eq('user_id', u.id);
+    if (u.role !== 'admin') q = q.eq('user_id', u.id);
     const { data, error } = await q;
     if (error) throw error;
     const orders = (data || []).map(orderFromDb);
@@ -2096,46 +2101,106 @@ window.DD_STORE_SYNC = (function () {
     return (data || []).map(function (r) { return Number(r.food_id); });
   }
 
-  /* ---------------- realtime ---------------- */
-  function subscribeRealtime() {
-    const c = state.client;
-    try {
-      const ch = c.channel('dishdash-live')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, function () {
-          if (!state.applying) pullOrders().catch(function () {});
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'foods' }, function () {
-          if (!state.applying) pullCatalog().catch(function () {});
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, function () {
-          if (!state.applying) pullCatalog().catch(function () {});
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'refund_requests' }, function () {
-          // a refund was requested or decided elsewhere — repaint every order
-          if (!state.applying) pullRefunds().then(function () { S.broadcast('orders'); }).catch(function () {});
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, function () {
-          if (!state.applying) {
-            // A new customer just signed up (or edited their profile) in another
-            // browser — refresh the admin's customer list live. Requires RLS to
-            // allow the admin to read profiles (policy already grants this).
-            pullUsers().then(function (list) {
-              usersCache = list;
-              S.broadcast('users');
-            }).catch(function () {});
-          }
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'reviews' }, function () {
-          if (!state.applying) pullReviews().catch(function () {});
-        })
-        .subscribe();
-      state.unsub.push(function () { try { c.removeChannel(ch); } catch (e) { /* noop */ } });
-    } catch (e) {
-      // realtime unavailable — app still works, just without live pushes
+  /* ---------------- realtime ----------------
+     ONE CHANNEL PER TABLE — and that is not a style preference.
+
+     Supabase Realtime refuses a postgres subscription that names a table which
+     is not in the `supabase_realtime` publication, and it refuses it SILENTLY:
+     the channel still reports `joined`, subscribe() still reports SUBSCRIBED, no
+     error is raised — and every OTHER binding on that channel goes quiet with
+     it. `profiles` was never published (supabase/realtime-schema.sql adds it),
+     so bundling it onto the same channel as `orders` meant order updates never
+     arrived anywhere: the customer's tracking page and the admin console both
+     stood still. Reproduced live — a channel carrying just `orders` delivered
+     events, and the moment `profiles` joined it, nothing did.
+
+     One channel per table means a table that cannot be subscribed can only cost
+     its own channel. Each one retries a dropped socket instead of going silent
+     for the rest of the session.                                        */
+  const LIVE_TABLES = [
+    { table: 'orders', run: function () { pullOrders().catch(function () {}); } },
+    { table: 'foods', run: function () { pullCatalog().catch(function () {}); } },
+    { table: 'categories', run: function () { pullCatalog().catch(function () {}); } },
+    { table: 'refund_requests', run: function () { pullRefunds().then(function () { S.broadcast('orders'); }).catch(function () {}); } },
+    /* Live customer list for the console. Admin-only: RLS would hand a customer
+       nothing but their own row, so the pull would be pure waste. */
+    { table: 'profiles', run: function () { if (sessionIsAdmin()) pullUsers().catch(function () {}); } },
+    { table: 'reviews', run: function () { pullReviews().catch(function () {}); } }
+  ];
+
+  let liveChannels = [];
+  let liveTimers = [];
+
+  function sessionIsAdmin() {
+    const s = shadowRead('session', null);
+    return !!(s && s.role === 'admin');
+  }
+
+  function openLiveChannel(spec) {
+    let attempts = 0;
+
+    function drop(ch) {
+      try { state.client.removeChannel(ch); } catch (e) { /* already gone */ }
+      liveChannels = liveChannels.filter(function (x) { return x !== ch; });
     }
+
+    function connect() {
+      if (!state.client) return;
+      let ch;
+      try {
+        ch = state.client
+          .channel('dd-live-' + spec.table)
+          .on('postgres_changes', { event: '*', schema: 'public', table: spec.table }, function () {
+            if (!state.applying) spec.run();
+          })
+          .subscribe(function (status) {
+            if (status !== 'CHANNEL_ERROR' && status !== 'TIMED_OUT') return;
+            drop(ch);
+            if (attempts >= 3) return;
+            attempts += 1;
+            liveTimers.push(setTimeout(connect, [2000, 6000, 15000][attempts - 1]));
+          });
+      } catch (e) {
+        return;   // realtime unavailable — app still works, just without pushes
+      }
+      liveChannels.push(ch);
+    }
+
+    connect();
+  }
+
+  let liveFor = undefined;   // identity the open channels were authorised as
+
+  function subscribeRealtime() {
+    liveFor = (shadowRead('session', null) || {}).id || null;
+    LIVE_TABLES.forEach(openLiveChannel);
+  }
+
+  /* Signing in or out changes the token the socket authorises with, so rebuild
+     the subscriptions rather than trusting channels that joined under the old
+     identity.
+
+     Rebuild ONLY when that identity really changed: boot has already subscribed
+     with the restored session, and tearing the channels down again while they
+     were still joining is what produced a console full of "WebSocket closed
+     before the connection is established". */
+  function restartRealtime() {
+    if (!state.client) return;
+    const who = (shadowRead('session', null) || {}).id || null;
+    if (liveFor === who && liveChannels.length) return;
+    stopRealtime();
+    subscribeRealtime();
+  }
+
+  function stopRealtime() {
+    liveChannels.forEach(function (ch) { try { state.client.removeChannel(ch); } catch (e) { /* noop */ } });
+    liveTimers.forEach(function (t) { clearTimeout(t); });
+    liveChannels = [];
+    liveTimers = [];
   }
 
   function teardown() {
+    stopRealtime();
     state.unsub.forEach(function (fn) { try { fn(); } catch (e) { /* noop */ } });
     state.unsub = [];
   }
@@ -2157,9 +2222,8 @@ window.DD_STORE_SYNC = (function () {
     setVerificationMode, verificationMode,
     upsertFood, deleteFood, saveCategories, deleteCategory,
     foodToDb, foodFromDb,
-    toggleFav, getFavIds,
-    promoteFirstAdmin, teardown,
-    _state: state,
+    toggleFav, getFavIds,      promoteFirstAdmin, teardown, restartRealtime,
+      _state: state,
     _shadow: { read: shadowRead, write: shadowWrite }
   };
 })();
@@ -2195,7 +2259,6 @@ window.DD_CLOUD = (function () {
 
   let sessionCache = null;   // cloud session (null = signed out)
   let favsCache = [];        // cloud favorite food ids
-  let usersCache = [];       // admin: profiles
   let installed = false;     // true once the cloud adapter has taken over the store
 
   function active() { return Y.status().mode === 'cloud'; }
@@ -2277,6 +2340,11 @@ window.DD_CLOUD = (function () {
     // signs in after an admin on this device could read the admin's pulled
     // list (all orders) from the shared shadow cache
     await Y.pullOrders().catch(function () {});
+    /* The console's customer list has to be there on first paint, not after the
+       admin types a name into the search box. */
+    if (sessionCache && sessionCache.role === 'admin') await Y.pullUsers().catch(function () {});
+    // a new session means a new token — rebuild the live subscriptions under it
+    Y.restartRealtime();
     S.broadcast('auth');
     return sessionCache;
   }
@@ -2350,7 +2418,14 @@ window.DD_CLOUD = (function () {
     S.updateReview = function (reviewId, rating, title, body) { return Y.updateReviewCloud(reviewId, rating, title, body); };
     S.deleteReview = function (reviewId) { return Y.deleteReviewCloud(reviewId); };
     S.feedbackSubmit = function (data) { return Y.feedbackSubmitCloud(data); };
-    S.users = function () { return usersCache; };
+    /* Read straight from the cloud shadow, which pullUsers() fills BEFORE it
+       broadcasts 'users'. The old module-level `usersCache` was assigned in a
+       .then() that ran after that broadcast had already gone out, so the
+       console rendered "0 of 0 customers" on load and only corrected itself
+       once the admin happened to type in the search box. The other assignment
+       lived in a DOMContentLoaded listener registered from install() — which
+       runs after that event has already fired, so it never ran at all. */
+    S.users = function () { return Y._shadow.read('users', []); };
 
     /* ---------- session ---------- */
     S.currentUser = cloudUser;
@@ -2363,7 +2438,14 @@ window.DD_CLOUD = (function () {
         return res;
       });
     };
-    S.logout = function () { sessionCache = null; favsCache = []; hintWrite(null); return Y.logout(); };
+    S.logout = function () {
+      sessionCache = null; favsCache = []; hintWrite(null);
+      // a deliberate sign-out must not leave another account's rows sitting in
+      // this browser's cache
+      Y._shadow.write('orders', []);
+      Y._shadow.write('users', []);
+      return Y.logout().then(function () { Y.restartRealtime(); });
+    };
     S.updateUser = function (id, patch) { return Y.updateProfile(id, patch).then(function (res) { if (res.ok) return refreshSession().then(function () { return res.user; }); throw new Error(res.error); }); };
 
     /* ---------- promo redemption (one-time codes) ----------
@@ -2602,17 +2684,13 @@ window.DD_CLOUD = (function () {
   }
 
   function installEventBridges() {
-    // after a realtime pull, refresh session-bound caches too
+    /* Every order change also moves a customer's order count and lifetime spend,
+       so keep the console's list honest. pullUsers() writes the shadow and then
+       broadcasts 'users' — that broadcast is what repaints the page. */
     S.on('orders', function () {
       if (!active()) return;
       const u = sessionCache;
-      if (u && u.role === 'admin') Y.pullUsers().then(function (list) { usersCache = list; }).catch(function () {});
-    });
-    // admin catalog pages need live users on load as well
-    document.addEventListener('DOMContentLoaded', function () {
-      if (!active()) return;
-      const u = sessionCache;
-      if (u && u.role === 'admin') Y.pullUsers().then(function (list) { usersCache = list; S.broadcast('users'); }).catch(function () {});
+      if (u && u.role === 'admin') Y.pullUsers().catch(function () {});
     });
   }
 

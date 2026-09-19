@@ -181,6 +181,15 @@ input[type=checkbox].switch:checked::after{left:21px}
 .searchbar-sm .btn{padding:10px 18px;font-size:.92rem}
 
 /* ---------- 8. Header / navigation ---------- */
+/* The header markup is injected into this empty wrapper by ui.js — so keep the
+   wrapper declared here, next to the header it holds. A sticky child can only
+   travel inside its own containing block, and a wrapper whose height equals the
+   header's gives position:sticky exactly zero room. The header then scrolled
+   away with the page while the menu toolbar stayed pinned at top:72px, leaving a
+   72px band of raw page scrolling through above it — which is what "the search
+   bar is overlapping the dishes" turned out to be. The wrapper is the thing
+   that has to stick. */
+#ddHeader{position:sticky;top:0;z-index:60}
 .site-header{position:sticky;top:0;z-index:60;background:rgba(250,246,240,.86);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid transparent;transition:.25s}
 .site-header.scrolled{background:rgba(255,255,255,.94);border-bottom-color:var(--line-2);box-shadow:var(--sh-sm)}
 .nav-inner{display:flex;align-items:center;gap:26px;height:72px}
@@ -458,7 +467,9 @@ input[type=checkbox].switch:checked::after{left:21px}
 .page-head .sub{color:var(--muted);margin-top:7px}
 
 /* ---------- 15. Menu toolbar & pagination ---------- */
-.toolbar{position:sticky;top:72px;z-index:40;background:rgba(250,246,240,.92);backdrop-filter:blur(10px);padding:14px 0;border-bottom:1px solid var(--line-2);margin-top:16px}
+/* Opaque, not frosted: this bar sits over dish photography while you scroll, and
+   a translucent pinned bar reads as content bleeding through it. */
+.toolbar{position:sticky;top:72px;z-index:40;background:var(--bg);padding:14px 0;border-bottom:1px solid var(--line-2);margin-top:16px}
 .toolbar-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .toolbar-row .searchbar{flex:1;min-width:230px}
 .chip-row{display:flex;gap:9px;overflow-x:auto;padding:2px 2px 12px;scrollbar-width:thin;scrollbar-color:#C9BCA9 transparent}

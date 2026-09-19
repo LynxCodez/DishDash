@@ -168,7 +168,10 @@
   /* ============================================================
      Rendering
      ============================================================ */
-  const state = { range: '7' };
+  /* slotOrders holds the in-range orders of the LAST render, so a click on a
+     heatmap square can answer "what actually happened in that hour?" without
+     re-deriving the report window. */
+  const state = { range: '7', slotOrders: [] };
 
   const METHOD_COLORS = { card: '#6366F1', cod: '#10B981', bank_transfer: '#F59E0B' };
   /* white -> yellow -> orange -> red, for heat cells */
@@ -223,21 +226,61 @@
     }).join('');
   }
 
+  function pad2(n) { return String(n).padStart(2, '0'); }
+
+  /* Every in-range order that lands in one weekday+hour slot. */
+  function slotOrders(day, hour) {
+    return state.slotOrders.filter(function (o) {
+      const p = lagosParts(o.placedAt);
+      return p.weekday === day && p.hour === hour;
+    }).sort(function (a, b) { return Date.parse(b.placedAt) - Date.parse(a.placedAt); });
+  }
+
+  /* A square is a real control, not decoration: it opens the orders behind the
+     count, each linking straight into the console's order detail. */
+  function openSlot(day, hour) {
+    const list = slotOrders(day, hour);
+    const when = esc(DAY_FULL[day] || day) + ' ' + pad2(hour) + ':00';
+    if (!list.length) {
+      UI.toast('Nothing in that slot', 'No orders were placed on ' + when + ' in this period.', 'info', 4200);
+      return;
+    }
+    const rows = list.map(function (o) {
+      return '<a class="slot-row" href="orders.html?open=' + esc(o.id) + '">'
+        + '<span class="sr-id">' + esc(o.id) + '</span>'
+        + '<span class="sr-who">' + esc((o.customer && o.customer.name) || 'Guest') + '</span>'
+        + UI.statusBadge(o.status)
+        + '<span class="sr-total">' + D.naira(o.total) + '</span>'
+        + '</a>';
+    }).join('');
+    UI.openModal(
+      '<div class="cc-sub">' + list.length + ' order' + (list.length === 1 ? '' : 's')
+        + ' placed — ' + when + ', local Lagos time. Paid: <b>'
+        + D.naira(list.filter(isPaid).reduce(function (s, o) { return s + Number(o.total || 0); }, 0)) + '</b>.</div>'
+      + '<div class="slot-list">' + rows + '</div>',
+      { title: when, size: 'lg' }
+    );
+  }
+
   function heatmapHTML(hm) {
     const callout = hm.busiest
-      ? 'Busiest: <b>' + esc(DAY_FULL[hm.busiest.day]) + ' ' + String(hm.busiest.hour).padStart(2, '0') + ':00</b> (' + hm.busiest.count + ' order' + (hm.busiest.count === 1 ? '' : 's') + ')'
+      ? 'Busiest: <b>' + esc(DAY_FULL[hm.busiest.day]) + ' ' + pad2(hm.busiest.hour) + ':00</b> (' + hm.busiest.count + ' order' + (hm.busiest.count === 1 ? '' : 's') + ')'
       : 'No orders in this period yet.';
-    let html = '<div class="cc-sub">Orders by weekday and hour — <b>local Lagos time</b></div>'
+    let html = '<div class="cc-sub">Orders by weekday and hour — <b>local Lagos time</b>. '
+      + 'Click a square to see the orders in it.</div>'
       + '<div class="rpt-callout">' + UI.ic('flame') + '<span>' + callout + '</span></div>'
-      + '<div class="rpt-heat-wrap"><div class="rpt-heat" role="img" aria-label="Heatmap of order counts by weekday and hour">';
+      + '<div class="rpt-heat-wrap"><div class="rpt-heat" role="group" aria-label="Order counts by weekday and hour. Each square is a button that lists that hour\'s orders.">';
     html += '<div class="rh-corner"></div>';
-    for (let h = 0; h < 24; h++) html += '<div class="rh-hour' + (h % 3 === 0 ? ' lab' : '') + '">' + (h % 3 === 0 ? String(h).padStart(2, '0') : '') + '</div>';
+    for (let h = 0; h < 24; h++) html += '<div class="rh-hour' + (h % 3 === 0 ? ' lab' : '') + '">' + (h % 3 === 0 ? pad2(h) : '') + '</div>';
     DAY_ORDER.forEach(function (d) {
       html += '<div class="rh-day">' + d + '</div>';
       for (let h = 0; h < 24; h++) {
         const c = (hm.grid[d] && hm.grid[d][h]) || 0;
-        html += '<div class="rh-cell" title="' + d + ' ' + String(h).padStart(2, '0') + ':00 — ' + c + ' order' + (c === 1 ? '' : 's') + '"'
-          + ' style="background:' + heatColor(c, hm.max) + '">' + (c ? '<span>' + c + '</span>' : '') + '</div>';
+        const label = (DAY_FULL[d] || d) + ' ' + pad2(h) + ':00 — ' + c + ' order' + (c === 1 ? '' : 's');
+        html += '<button type="button" class="rh-cell" data-day="' + d + '" data-hour="' + h + '"'
+          + ' style="background:' + heatColor(c, hm.max) + '"'
+          + ' title="' + label + '" aria-label="' + label + ' — list them">'
+          + (c ? '<span>' + c + '</span>' : '') + '</button>';
       }
     });
     html += '</div>'
@@ -256,10 +299,14 @@
     const start = rangeStart(state.range, now);
     const prevStart = rangeStartPrevious(state.range, now);
 
-    const cur = summarize(all.filter(function (o) { return inRange(o, start, now); }));
+    // one filter pass, reused by every card below and by the heatmap's clicks
+    const windowOrders = all.filter(function (o) { return inRange(o, start, now); });
+    state.slotOrders = windowOrders;
+
+    const cur = summarize(windowOrders);
     const prev = prevStart === null ? null : summarize(all.filter(function (o) { return inRange(o, prevStart, start); }));
-    const methods = revenueByMethod(all.filter(function (o) { return inRange(o, start, now); }));
-    const hm = heatmap(all.filter(function (o) { return inRange(o, start, now); }));
+    const methods = revenueByMethod(windowOrders);
+    const hm = heatmap(windowOrders);
 
     const tabs = Object.keys(REPORT_RANGES).map(function (k) {
       return '<button class="atab' + (state.range === k ? ' active' : '') + '" data-range="' + k + '" aria-pressed="' + (state.range === k) + '">'
@@ -290,6 +337,12 @@
     });
     const exp = root.querySelector('[data-export]');
     if (exp) exp.addEventListener('click', function () { exportCsv(all, start, now); });
+
+    root.querySelectorAll('.rh-cell').forEach(function (b) {
+      b.addEventListener('click', function () {
+        openSlot(b.getAttribute('data-day'), Number(b.getAttribute('data-hour')));
+      });
+    });
 
     UI.reveal(root);
   }

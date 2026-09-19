@@ -120,6 +120,9 @@
   // cloud mode: the store broadcasts 'users' after every profiles pull
   // (realtime or session change) — re-render so new signups appear unbidden
   if (S.on) S.on('users', function () { render(); });
+  // the Orders and Total-spent columns are derived from orders, so a new order
+  // or a status change has to move those numbers too
+  if (S.on) S.on('orders', function () { render(); });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();

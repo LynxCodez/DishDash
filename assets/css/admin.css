@@ -258,10 +258,24 @@ table.tbl{width:100%;border-collapse:collapse;min-width:720px}
 .rh-hour{font-size:.6rem;color:var(--faint);text-align:center;height:14px}
 .rh-hour.lab{color:var(--muted);font-weight:700}
 .rh-day{font-size:.7rem;font-weight:700;color:var(--muted);display:flex;align-items:center}
-.rh-cell{aspect-ratio:1;border-radius:4px;min-height:20px;display:flex;align-items:center;justify-content:center;position:relative}
+/* A cell is a BUTTON: it opens the orders behind its count. */
+.rh-cell{aspect-ratio:1;border-radius:4px;min-height:20px;display:flex;align-items:center;justify-content:center;position:relative;border:0;padding:0;font:inherit;cursor:pointer}
 .rh-cell span{font-size:.58rem;font-weight:800;color:rgba(60,30,0,.75)}
-.rh-cell:hover{outline:2px solid var(--brand-400);outline-offset:-1px;cursor:default}
+.rh-cell:hover{outline:2px solid var(--brand-400);outline-offset:-1px}
+.rh-cell:focus-visible{outline:2px solid var(--brand-600);outline-offset:1px;z-index:1}
 .rpt-heat-legend{display:flex;align-items:center;gap:6px;font-size:.72rem;color:var(--muted);margin-top:10px}
+
+/* Peak-hours detail: the orders behind one heatmap square */
+.slot-list{display:grid;gap:8px;margin-top:12px}
+.slot-row{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);transition:.15s}
+.slot-row:hover{border-color:var(--brand-300);box-shadow:var(--sh-sm);transform:translateY(-1px)}
+.slot-row .sr-id{font-weight:800;font-size:.9rem}
+.slot-row .sr-who{color:var(--muted);font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slot-row .sr-total{font-weight:800}
+@media (max-width:560px){
+  .slot-row{grid-template-columns:1fr auto;row-gap:6px}
+  .slot-row .sr-who{grid-column:1/-1}
+}
 .rpt-heat-legend i{width:18px;height:11px;border-radius:3px;display:inline-block}
 .rpt-footnote{display:flex;gap:9px;align-items:flex-start;max-width:900px;font-size:.78rem;line-height:1.55;color:var(--muted);margin-top:18px}
 .rpt-footnote .ic{flex:none;margin-top:1px;width:14px;height:14px;color:var(--brand-500)}
